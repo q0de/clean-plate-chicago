@@ -3,6 +3,10 @@ import { notFound } from "next/navigation";
 import { NeighborhoodDetailClient } from "./NeighborhoodDetailClient";
 import { supabase } from "@/lib/supabase";
 
+// Disable static caching - always fetch fresh data
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 interface Neighborhood {
   id: string;
   name: string;

@@ -21,7 +21,8 @@ interface InspectionData {
 }
 
 export async function generateAISummary(data: InspectionData): Promise<string> {
-  const cacheKey = `${data.dba_name}-${data.latest_inspection_date}-${data.violation_count}`;
+  // Include score in cache key so updates to score bust the cache
+  const cacheKey = `${data.dba_name}-${data.latest_inspection_date}-${data.cleanplate_score}-${data.violation_count}`;
   
   // Check cache first
   const cached = summaryCache.get(cacheKey);
@@ -125,6 +126,67 @@ export async function generateBatchSummaries(
   }
   
   return results;
+}
+
+// Extract violation themes from raw violations text
+export function extractViolationThemes(rawViolations: string | null): string[] {
+  if (!rawViolations) return [];
+  
+  const themes: string[] = [];
+  const lowerText = rawViolations.toLowerCase();
+  
+  // Common violation categories to look for
+  const themeMap: Record<string, string> = {
+    "food temperature": "Temperature Control",
+    "cold holding": "Temperature Control",
+    "hot holding": "Temperature Control",
+    "cross contamination": "Cross Contamination",
+    "cross-contamination": "Cross Contamination",
+    "raw meat": "Cross Contamination",
+    "hand wash": "Handwashing",
+    "handwash": "Handwashing",
+    "rodent": "Pest Control",
+    "roach": "Pest Control",
+    "pest": "Pest Control",
+    "mouse": "Pest Control",
+    "mice": "Pest Control",
+    "droppings": "Pest Control",
+    "insect": "Pest Control",
+    "flies": "Pest Control",
+    "sanitiz": "Sanitization",
+    "disinfect": "Sanitization",
+    "clean": "Cleanliness",
+    "dirty": "Cleanliness",
+    "debris": "Cleanliness",
+    "grease": "Cleanliness",
+    "food storage": "Food Storage",
+    "properly labeled": "Labeling",
+    "label": "Labeling",
+    "expired": "Expired Products",
+    "past date": "Expired Products",
+    "certificate": "Documentation",
+    "license": "Documentation",
+    "permit": "Documentation",
+    "no city of chicago": "Documentation",
+    "sewage": "Plumbing",
+    "plumbing": "Plumbing",
+    "drain": "Plumbing",
+    "toxic": "Chemical Safety",
+    "chemical": "Chemical Safety",
+    "ventilation": "Ventilation",
+    "equipment": "Equipment Issues",
+    "refrigerat": "Equipment Issues",
+    "thermometer": "Equipment Issues",
+  };
+  
+  for (const [keyword, theme] of Object.entries(themeMap)) {
+    if (lowerText.includes(keyword) && !themes.includes(theme)) {
+      themes.push(theme);
+    }
+  }
+  
+  // Limit to top 4 themes
+  return themes.slice(0, 4);
 }
 
 

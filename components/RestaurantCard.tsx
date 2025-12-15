@@ -27,12 +27,13 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
   const router = useRouter();
   
   // Determine status based on result AND score
-  // Pass with low score (< 80) shows as conditional (amber) to indicate caution
+  // Determine status based on inspection result first, then score
   const getStatus = () => {
     const result = restaurant.latest_result.toLowerCase();
     if (result.includes("fail")) return "fail";
     if (result.includes("condition")) return "conditional";
-    if (restaurant.cleanplate_score < 80) return "conditional";
+    // Only show as conditional if score is very low (< 60) despite passing
+    if (restaurant.cleanplate_score < 60) return "conditional";
     return "pass";
   };
   const status = getStatus();

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, ArrowUpDown, Loader2, X, MapPin, TrendingUp, Building2, ChevronRight, Clock, AlertTriangle } from "lucide-react";
+import { Search, ArrowUpDown, Loader2, X, MapPin, TrendingUp, Building2, ChevronRight, Clock, AlertTriangle, Calendar } from "lucide-react";
 import { NeighborhoodChips } from "./NeighborhoodChips";
 import { MapRestaurantCard } from "./MapRestaurantCard";
+import { StatusBadge } from "./StatusBadge";
 import Link from "next/link";
 
 interface Neighborhood {
@@ -25,6 +26,7 @@ interface Restaurant {
   cleanplate_score: number;
   latest_result: string;
   neighborhood?: string;
+  neighborhood_slug?: string;
   latitude: number;
   longitude: number;
   latest_inspection_date?: string;
@@ -39,7 +41,6 @@ interface MapSidebarProps {
   restaurants: Restaurant[];
   isLoading: boolean;
   selectedRestaurantId: string | null;
-  selectedRestaurant?: Restaurant | null;
   hoveredRestaurantId: string | null;
   onRestaurantClick: (restaurant: Restaurant) => void;
   onRestaurantHover: (id: string | null) => void;
@@ -54,7 +55,6 @@ export function MapSidebar({
   restaurants,
   isLoading,
   selectedRestaurantId,
-  selectedRestaurant,
   hoveredRestaurantId,
   onRestaurantClick,
   onRestaurantHover,
@@ -70,6 +70,8 @@ export function MapSidebar({
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [allNeighborhoods, setAllNeighborhoods] = useState<Neighborhood[]>([]);
   const searchRef = useRef<HTMLDivElement>(null);
+  const restaurantListRef = useRef<HTMLDivElement>(null);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
 
   // Fetch all neighborhoods for search
   useEffect(() => {
@@ -89,6 +91,22 @@ export function MapSidebar({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Scroll to selected or hovered restaurant in list when it changes
+  useEffect(() => {
+    const restaurantIdToScroll = selectedRestaurantId || hoveredRestaurantId;
+    if (restaurantIdToScroll && restaurantListRef.current) {
+      // Longer delay to ensure DOM is updated and expansion animation completes
+      setTimeout(() => {
+        if (selectedCardRef.current) {
+          selectedCardRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }
+      }, 300);
+    }
+  }, [selectedRestaurantId, hoveredRestaurantId]);
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: "score", label: "Highest Score" },
@@ -374,7 +392,7 @@ export function MapSidebar({
       </div>
 
       {/* Restaurant List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={restaurantListRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {isLoading ? (
           // Loading skeletons
           [...Array(5)].map((_, i) => (
@@ -398,16 +416,25 @@ export function MapSidebar({
             </p>
           </div>
         ) : (
-          filteredRestaurants.map((restaurant) => (
-            <MapRestaurantCard
-              key={restaurant.id}
-              restaurant={restaurant}
-              isSelected={selectedRestaurantId === restaurant.id}
-              isHovered={hoveredRestaurantId === restaurant.id}
-              onHover={onRestaurantHover}
-              onClick={() => onRestaurantClick(restaurant)}
-            />
-          ))
+          filteredRestaurants.map((restaurant) => {
+            const isSelected = selectedRestaurantId === restaurant.id;
+            const isHovered = hoveredRestaurantId === restaurant.id;
+            const shouldScroll = isSelected || isHovered;
+            return (
+              <div
+                key={restaurant.id}
+                ref={shouldScroll ? selectedCardRef : null}
+              >
+                <MapRestaurantCard
+                  restaurant={restaurant}
+                  isSelected={isSelected}
+                  isHovered={isHovered}
+                  onHover={onRestaurantHover}
+                  onClick={() => onRestaurantClick(restaurant)}
+                />
+              </div>
+            );
+          })
         )}
       </div>
     </div>

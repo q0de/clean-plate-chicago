@@ -1,8 +1,7 @@
 "use client";
 
 import { MapPin, Building2, ChevronRight, Calendar, AlertTriangle, Clock } from "lucide-react";
-import { StatusBadge } from "./StatusBadge";
-import { ScoreDisplay } from "./ScoreDisplay";
+import { ScoreStatusDisplayCompact } from "./ScoreStatusDisplay";
 import Link from "next/link";
 
 interface MapRestaurantCardProps {
@@ -75,12 +74,13 @@ export function MapRestaurantCard({
   onClick,
 }: MapRestaurantCardProps) {
   // Determine status based on result AND score
-  // Pass with low score (< 80) shows as conditional (amber) to indicate caution
+  // Determine status based on inspection result first, then score
   const getStatus = () => {
     const result = restaurant.latest_result.toLowerCase();
     if (result.includes("fail")) return "fail";
     if (result.includes("condition")) return "conditional";
-    if (restaurant.cleanplate_score < 80) return "conditional";
+    // Only show as conditional if score is very low (< 60) despite passing
+    if (restaurant.cleanplate_score < 60) return "conditional";
     return "pass";
   };
   const status = getStatus();
@@ -112,28 +112,28 @@ export function MapRestaurantCard({
     >
       {/* Main Card Content */}
       <div className="p-3">
-        <div className="flex items-start gap-3">
-          {/* Score Circle */}
-          <div className="flex-shrink-0">
-            <ScoreDisplay score={restaurant.cleanplate_score} size="sm" />
+        <div className="flex flex-col gap-2">
+          {/* Score + Status Display (respects display mode) */}
+          <div className="flex items-center justify-between gap-2">
+            <ScoreStatusDisplayCompact 
+              score={restaurant.cleanplate_score} 
+              latestResult={restaurant.latest_result} 
+            />
+            {/* Facility Badge */}
+            {(() => {
+              const badge = getFacilityBadge(restaurant.facility_type);
+              return (
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${badge.color} flex-shrink-0`}>
+                  <span>{badge.emoji}</span>
+                  {badge.label}
+                </span>
+              );
+            })()}
           </div>
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            {/* Status + Facility Badge */}
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <StatusBadge status={status} size="sm" />
-              {(() => {
-                const badge = getFacilityBadge(restaurant.facility_type);
-                return (
-                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${badge.color}`}>
-                    <span>{badge.emoji}</span>
-                    {badge.label}
-                  </span>
-                );
-              })()}
-            </div>
-            <h4 className="font-semibold text-gray-900 text-sm line-clamp-1 mb-1">
+          {/* Restaurant Name & Address */}
+          <div className="min-w-0">
+            <h4 className="font-semibold text-gray-900 text-sm line-clamp-1 mb-0.5">
               {restaurant.dba_name}
             </h4>
             <div className="flex items-center gap-1 text-xs text-gray-500">

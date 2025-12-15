@@ -10,6 +10,7 @@ import { X, List } from "lucide-react";
 
 interface Restaurant extends MapRestaurant {
   neighborhood?: string;
+  neighborhood_slug?: string;
   latest_inspection_date?: string;
   violation_count?: number;
   risk_level?: number;
@@ -32,35 +33,56 @@ export default function MapPage() {
   const mapRef = useRef<MapHandle>(null);
   
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(null);
   const [hoveredRestaurantId, setHoveredRestaurantId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(null);
   const [selectedNeighborhoodData, setSelectedNeighborhoodData] = useState<Neighborhood | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
   
-  const initialCenter: [number, number] = [
-    parseFloat(searchParams.get("lng") || "-87.6298"),
-    parseFloat(searchParams.get("lat") || "41.8781"),
-  ];
-  const initialZoom = parseFloat(searchParams.get("zoom") || "12");
+  // Default to Loop coordinates if no URL params
+  const hasUrlParams = !!(searchParams.get("lng") || searchParams.get("lat") || searchParams.get("zoom"));
+  const initialCenter: [number, number] = hasUrlParams
+    ? [
+        parseFloat(searchParams.get("lng") || "-87.6298"),
+        parseFloat(searchParams.get("lat") || "41.8781"),
+      ]
+    : [-87.6298, 41.8781]; // Loop coordinates
+  const initialZoom = parseFloat(searchParams.get("zoom") || (hasUrlParams ? "12" : "14"));
   
   // Use ref for center to avoid triggering re-fetches on every map move
   const centerRef = useRef<[number, number]>(initialCenter);
   const [zoom, setZoom] = useState(initialZoom);
 
-  const fetchRestaurants = useCallback(async (lat?: number, lng?: number, neighborhood?: string) => {
+  const fetchRestaurants = useCallback(async (
+    lat?: number, 
+    lng?: number, 
+    neighborhoodSlug?: string
+  ) => {
     setIsLoading(true);
     try {
       const fetchLat = lat ?? centerRef.current[1];
       const fetchLng = lng ?? centerRef.current[0];
-      let url = `/api/nearby?lat=${fetchLat}&lng=${fetchLng}&radius_miles=3&limit=50`;
-      if (neighborhood) {
-        url += `&neighborhood=${encodeURIComponent(neighborhood)}`;
+      let url = `/api/nearby?lat=${fetchLat}&lng=${fetchLng}&radius_miles=3&limit=100`;
+      
+      // Pass neighborhood slug for database-level filtering
+      if (neighborhoodSlug) {
+        url += `&neighborhood_slug=${encodeURIComponent(neighborhoodSlug)}`;
       }
+      
       const res = await fetch(url);
       const data = await res.json();
-      setRestaurants(data.data || []);
+      let restaurantsData = data.data || [];
+      
+      // Additional validation: if neighborhood is selected, ensure all restaurants belong to it
+      if (neighborhoodSlug) {
+        restaurantsData = restaurantsData.filter((r: Restaurant) => 
+          r.neighborhood_slug === neighborhoodSlug
+        );
+      }
+      
+      setRestaurants(restaurantsData);
     } catch (error) {
       console.error("Failed to fetch restaurants:", error);
     } finally {
@@ -68,10 +90,48 @@ export default function MapPage() {
     }
   }, []);
 
-  // Initial fetch only
+  // Initial load: default to Loop neighborhood if no URL params
   useEffect(() => {
-    fetchRestaurants();
-  }, [fetchRestaurants]);
+    if (hasInitialized) return; // Only run once
+    setHasInitialized(true);
+    
+    if (!hasUrlParams) {
+      // Default to Loop neighborhood
+      const loadLoopNeighborhood = async () => {
+        try {
+          const res = await fetch("/api/neighborhoods/loop");
+          const data = await res.json();
+          if (data.data) {
+            const loopNeighborhood = data.data;
+            setSelectedNeighborhood(loopNeighborhood.slug);
+            setSelectedNeighborhoodData(loopNeighborhood);
+            
+            // Set map center to Loop's center or default Loop coordinates
+            const loopCenter: [number, number] = loopNeighborhood.center_lng && loopNeighborhood.center_lat
+              ? [loopNeighborhood.center_lng, loopNeighborhood.center_lat]
+              : [-87.6298, 41.8781]; // Default Loop coordinates
+            
+            centerRef.current = loopCenter;
+            if (mapRef.current) {
+              mapRef.current.flyTo(loopCenter, 14);
+            }
+            
+            // Fetch restaurants for Loop - this will filter by neighborhood
+            await fetchRestaurants(loopCenter[1], loopCenter[0], loopNeighborhood.slug);
+          }
+        } catch (error) {
+          console.error("Failed to load Loop neighborhood:", error);
+          // Fallback to default fetch
+          fetchRestaurants();
+        }
+      };
+      
+      loadLoopNeighborhood();
+    } else {
+      // Use URL params or default
+      fetchRestaurants();
+    }
+  }, [fetchRestaurants, hasUrlParams, hasInitialized]);
 
   const handleNeighborhoodSelect = (neighborhood: Neighborhood | null) => {
     if (neighborhood) {
@@ -82,8 +142,9 @@ export default function MapPage() {
         const newCenter: [number, number] = [neighborhood.center_lng, neighborhood.center_lat];
         mapRef.current.flyTo(newCenter, 14);
         centerRef.current = newCenter;
-        fetchRestaurants(neighborhood.center_lat, neighborhood.center_lng, neighborhood.name);
       }
+      // Filter by neighborhood slug (uses database relationship)
+      fetchRestaurants(neighborhood.center_lat, neighborhood.center_lng, neighborhood.slug);
     } else {
       setSelectedNeighborhood(null);
       setSelectedNeighborhoodData(null);
@@ -96,17 +157,40 @@ export default function MapPage() {
   };
 
   const handleRestaurantClick = (restaurant: Restaurant) => {
-    setSelectedRestaurant(restaurant);
+    setSelectedRestaurantId(restaurant.id);
     // Pan map to restaurant
     if (mapRef.current) {
       mapRef.current.flyTo([restaurant.longitude, restaurant.latitude], 15);
     }
   };
 
-  const handleMarkerClick = (restaurant: MapRestaurant) => {
+  const handleMarkerClick = async (restaurant: MapRestaurant) => {
     const fullRestaurant = restaurants.find(r => r.id === restaurant.id);
     if (fullRestaurant) {
-      setSelectedRestaurant(fullRestaurant);
+      // Set selectedRestaurantId to expand restaurant in list
+      setSelectedRestaurantId(fullRestaurant.id);
+      
+      // Highlight the restaurant in the list
+      setHoveredRestaurantId(fullRestaurant.id);
+      
+      // Pan map to restaurant
+      if (mapRef.current) {
+        mapRef.current.flyTo([restaurant.longitude, restaurant.latitude], 15);
+      }
+      
+      // Auto-populate neighborhood card if restaurant has a neighborhood
+      if (fullRestaurant.neighborhood_slug) {
+        try {
+          const res = await fetch(`/api/neighborhoods/${fullRestaurant.neighborhood_slug}`);
+          const data = await res.json();
+          if (data.data) {
+            setSelectedNeighborhood(data.data.slug);
+            setSelectedNeighborhoodData(data.data);
+          }
+        } catch (error) {
+          console.error("Failed to fetch neighborhood data:", error);
+        }
+      }
     }
   };
 
@@ -130,12 +214,13 @@ export default function MapPage() {
           <MapSidebar
             restaurants={restaurants}
             isLoading={isLoading}
-            selectedRestaurantId={selectedRestaurant?.id || null}
-            selectedRestaurant={selectedRestaurant}
+            selectedRestaurantId={selectedRestaurantId}
             hoveredRestaurantId={hoveredRestaurantId}
             onRestaurantClick={handleRestaurantClick}
             onRestaurantHover={setHoveredRestaurantId}
-            onRestaurantDeselect={() => setSelectedRestaurant(null)}
+            onRestaurantDeselect={() => {
+              setSelectedRestaurantId(null);
+            }}
             onNeighborhoodSelect={handleNeighborhoodSelect}
             onSearch={handleSearch}
             selectedNeighborhood={selectedNeighborhood}
@@ -152,7 +237,7 @@ export default function MapPage() {
             zoom={initialZoom}
             onMarkerClick={handleMarkerClick}
             onMoveEnd={handleMapMove}
-            highlightedId={hoveredRestaurantId || selectedRestaurant?.id}
+            highlightedId={hoveredRestaurantId || selectedRestaurantId}
             selectedNeighborhoodSlug={selectedNeighborhood}
             className="absolute inset-0"
           />
@@ -205,15 +290,16 @@ export default function MapPage() {
               <MapSidebar
                 restaurants={restaurants}
                 isLoading={isLoading}
-                selectedRestaurantId={selectedRestaurant?.id || null}
-                selectedRestaurant={selectedRestaurant}
+                selectedRestaurantId={selectedRestaurantId}
                 hoveredRestaurantId={hoveredRestaurantId}
                 onRestaurantClick={(r) => {
                   handleRestaurantClick(r);
                   setShowMobileSidebar(false);
                 }}
                 onRestaurantHover={setHoveredRestaurantId}
-                onRestaurantDeselect={() => setSelectedRestaurant(null)}
+                onRestaurantDeselect={() => {
+                  setSelectedRestaurantId(null);
+                }}
                 onNeighborhoodSelect={(n) => {
                   handleNeighborhoodSelect(n);
                   setShowMobileSidebar(false);

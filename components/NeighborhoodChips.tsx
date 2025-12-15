@@ -76,27 +76,35 @@ function calculateCentroid(geometry: { type: string; coordinates: number[][][] |
   return [totalLng / allPoints.length, totalLat / allPoints.length];
 }
 
+interface NeighborhoodGeoData {
+  center: [number, number];
+  geometry: { type: string; coordinates: number[][][] | number[][][][] };
+}
+
 export function NeighborhoodChips({ selectedNeighborhood, onSelect }: NeighborhoodChipsProps) {
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const neighborhoodCentersRef = useRef<Record<string, [number, number]>>({});
+  const neighborhoodGeoRef = useRef<Record<string, NeighborhoodGeoData>>({});
 
-  // Fetch neighborhood boundaries for center calculation
+  // Fetch neighborhood boundaries for center calculation and geometry
   useEffect(() => {
     fetch(BOUNDARIES_URL)
       .then((res) => res.json())
       .then((geojson) => {
-        const centers: Record<string, [number, number]> = {};
+        const geoData: Record<string, NeighborhoodGeoData> = {};
         for (const feature of geojson.features || []) {
           const name = (feature.properties?.pri_neigh || feature.properties?.community || "").toLowerCase();
           const slug = name.replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
           if (feature.geometry) {
-            centers[slug] = calculateCentroid(feature.geometry);
+            geoData[slug] = {
+              center: calculateCentroid(feature.geometry),
+              geometry: feature.geometry,
+            };
           }
         }
-        neighborhoodCentersRef.current = centers;
+        neighborhoodGeoRef.current = geoData;
       })
       .catch((err) => console.warn("Failed to fetch boundaries:", err));
   }, []);
@@ -136,28 +144,29 @@ export function NeighborhoodChips({ selectedNeighborhood, onSelect }: Neighborho
 
   const handleSelectAndClose = (n: Neighborhood | null) => {
     if (n) {
-      // Enrich with center coordinates from boundaries
-      let foundCenter = neighborhoodCentersRef.current[n.slug];
+      // Enrich with center coordinates and geometry from boundaries
+      let foundGeo = neighborhoodGeoRef.current[n.slug];
       
       // If no match found by exact slug, try fuzzy match
-      if (!foundCenter) {
+      if (!foundGeo) {
         const normalizedName = n.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        foundCenter = neighborhoodCentersRef.current[normalizedName];
+        foundGeo = neighborhoodGeoRef.current[normalizedName];
         
         // Try finding by partial match
-        if (!foundCenter) {
-          const keys = Object.keys(neighborhoodCentersRef.current);
+        if (!foundGeo) {
+          const keys = Object.keys(neighborhoodGeoRef.current);
           const match = keys.find(k => k.includes(n.slug) || n.slug.includes(k));
           if (match) {
-            foundCenter = neighborhoodCentersRef.current[match];
+            foundGeo = neighborhoodGeoRef.current[match];
           }
         }
       }
       
       const enriched = {
         ...n,
-        center_lng: foundCenter?.[0] || -87.6298,
-        center_lat: foundCenter?.[1] || 41.8781,
+        center_lng: foundGeo?.center[0] || -87.6298,
+        center_lat: foundGeo?.center[1] || 41.8781,
+        geometry: foundGeo?.geometry,
       };
       onSelect(enriched);
     } else {

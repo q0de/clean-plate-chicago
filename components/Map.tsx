@@ -39,7 +39,7 @@ function MapComponent(
 ) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<globalThis.Map<string, { marker: mapboxgl.Marker; element: HTMLDivElement }>>(new globalThis.Map());
+  const markersRef = useRef<globalThis.Map<string, { marker: mapboxgl.Marker; element: HTMLDivElement; innerElement: HTMLDivElement }>>(new globalThis.Map());
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadMarkedRef = useRef(false);
@@ -186,6 +186,9 @@ function MapComponent(
       }
     });
 
+    // Group restaurants by location to handle overlapping markers
+    const locationMap = new globalThis.Map<string, number>();
+    
     // Add new markers (don't update existing ones here)
     restaurants.forEach((restaurant) => {
       if (markersRef.current.has(restaurant.id)) {
@@ -193,31 +196,65 @@ function MapComponent(
         return;
       }
 
-      // Determine status based on result AND score
-      // Pass with low score (< 80) shows as conditional (amber) to indicate caution
+      // Determine status based on inspection result first, then score
       const getStatus = () => {
         const result = restaurant.latest_result.toLowerCase();
+        // Explicit fail always shows red
         if (result.includes("fail")) return "fail";
+        // Conditional pass shows yellow
         if (result.includes("condition")) return "conditional";
-        if (restaurant.cleanplate_score < 80) return "conditional";
+        // Score below 60 is concerning even if passed - show yellow
+        if (restaurant.cleanplate_score < 60) return "conditional";
+        // Passed inspection with score >= 60 shows green
         return "pass";
       };
       const status = getStatus();
 
-      // Create new marker
-      const el = document.createElement("div");
-      el.className = "marker";
-      el.style.width = "16px";
-      el.style.height = "16px";
-      el.style.borderRadius = "50%";
-      el.style.backgroundColor = colors[status];
-      el.style.border = "3px solid white";
-      el.style.cursor = "pointer";
-      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
-      el.style.transition = "transform 0.15s ease-out, box-shadow 0.15s ease-out";
+      // Validate coordinates
+      if (typeof restaurant.longitude !== 'number' || typeof restaurant.latitude !== 'number' ||
+          isNaN(restaurant.longitude) || isNaN(restaurant.latitude)) {
+        console.warn(`Invalid coordinates for restaurant ${restaurant.id}:`, restaurant.longitude, restaurant.latitude);
+        return;
+      }
 
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat([restaurant.longitude, restaurant.latitude])
+      // Create a location key (rounded to 4 decimal places to group nearby markers)
+      const locationKey = `${restaurant.longitude.toFixed(4)},${restaurant.latitude.toFixed(4)}`;
+      const markerIndex = locationMap.get(locationKey) || 0;
+      locationMap.set(locationKey, markerIndex + 1);
+
+      // Add small offset for overlapping markers (spiral pattern) - only if there are multiple at same location
+      let finalLng = restaurant.longitude;
+      let finalLat = restaurant.latitude;
+      if (markerIndex > 0) {
+        const offsetDistance = markerIndex * 0.0001; // ~11 meters per 0.0001 degrees
+        const angle = markerIndex * (Math.PI * 2 / 6); // 6 markers in a circle
+        finalLng = restaurant.longitude + (Math.cos(angle) * offsetDistance);
+        finalLat = restaurant.latitude + (Math.sin(angle) * offsetDistance);
+      }
+
+      // Create new marker with inner element for scaling (to not interfere with Mapbox's transform)
+      const el = document.createElement("div");
+      el.className = "marker-container";
+      el.style.cursor = "pointer";
+      el.style.pointerEvents = "auto";
+      
+      // Inner circle element that we can safely scale without affecting Mapbox positioning
+      const inner = document.createElement("div");
+      inner.className = "marker-inner";
+      inner.style.width = "16px";
+      inner.style.height = "16px";
+      inner.style.borderRadius = "50%";
+      inner.style.backgroundColor = colors[status];
+      inner.style.border = "3px solid white";
+      inner.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+      inner.style.transition = "transform 0.15s ease-out, box-shadow 0.15s ease-out";
+      el.appendChild(inner);
+
+      const marker = new mapboxgl.Marker({
+        element: el,
+        anchor: "center"
+      })
+        .setLngLat([finalLng, finalLat])
         .addTo(mapInstance.current!);
 
       el.addEventListener("click", () => {
@@ -225,22 +262,25 @@ function MapComponent(
         if (r) onMarkerClick?.(r);
       });
 
-      markersRef.current.set(restaurant.id, { marker, element: el });
+      markersRef.current.set(restaurant.id, { marker, element: el, innerElement: inner });
     });
   }, [restaurants, isLoaded, onMarkerClick]);
 
   // Update highlighted marker - separate effect, only runs when highlightedId changes
+  // Scale the INNER element to avoid conflicting with Mapbox's positioning transform
   useEffect(() => {
     markersRef.current.forEach((data, id) => {
       const isHighlighted = highlightedId === id;
       if (isHighlighted) {
-        data.element.style.transform = "scale(1.5)";
-        data.element.style.zIndex = "100";
-        data.element.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+        // Scale the inner element, not the container (container uses Mapbox transforms for positioning)
+        data.innerElement.style.transform = "scale(1.5)";
+        data.innerElement.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+        // Bring highlighted marker to front via the container's z-index
+        data.element.style.zIndex = "1000";
       } else {
-        data.element.style.transform = "scale(1)";
+        data.innerElement.style.transform = "scale(1)";
+        data.innerElement.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
         data.element.style.zIndex = "1";
-        data.element.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
       }
     });
   }, [highlightedId]);
@@ -344,6 +384,16 @@ function MapComponent(
         </div>
       )}
       <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
+      <style jsx global>{`
+        .mapboxgl-marker {
+          position: absolute;
+          will-change: transform;
+        }
+        .mapboxgl-marker > div {
+          position: relative;
+          pointer-events: auto;
+        }
+      `}</style>
     </div>
   );
 }

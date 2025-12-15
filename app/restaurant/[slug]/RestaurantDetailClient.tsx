@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ScoreDisplay } from "@/components/ScoreDisplay";
-import { StatusBadge } from "@/components/StatusBadge";
+import { ScoreStatusDisplay, DisplayModeSelector } from "@/components/ScoreStatusDisplay";
 import { ScoreTrendChart } from "@/components/ScoreTrendChart";
 import { InspectionTimeline, TimelineInspection } from "@/components/InspectionTimeline";
 import { Map } from "@/components/Map";
 import { BottomNav } from "@/components/BottomNav";
-import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, History, Sparkles } from "lucide-react";
+import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Restaurant {
@@ -49,6 +48,214 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [violationThemes, setViolationThemes] = useState<string[]>([]);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+  
+  // Badge computation based on inspection history
+  interface Badge {
+    icon: React.ReactNode;
+    label: string;
+    color: string;
+    bgColor: string;
+  }
+  
+  const computeBadges = (inspectionList: TimelineInspection[], currentStatus: "pass" | "conditional" | "fail"): Badge[] => {
+    if (inspectionList.length === 0) return [];
+    
+    const badges: Badge[] = [];
+    const last5 = inspectionList.slice(0, 5);
+    const last3 = inspectionList.slice(0, 3);
+    
+    // Use the actual displayed status to avoid confusing badges
+    const isCurrentlyPassing = currentStatus === "pass";
+    const isCurrentlyFailing = currentStatus === "fail";
+    
+    // Helper to check if result is a pass
+    const isPassing = (result: string) => {
+      const r = result.toLowerCase();
+      return r.includes("pass") && !r.includes("fail");
+    };
+    
+    // Helper to check if result is a fail
+    const isFailing = (result: string) => {
+      return result.toLowerCase().includes("fail");
+    };
+    
+    // Check for critical violations in recent inspections
+    const hasCriticalViolations = last3.some(insp => 
+      insp.violations?.some(v => v.is_critical === true)
+    );
+    
+    // Collect all violations from last 3 inspections for category analysis
+    const allRecentViolations = last3.flatMap(insp => insp.violations || []);
+    
+    // Helper to check violation categories by code
+    const getViolationCategory = (code: string) => {
+      const codeNum = parseInt(code);
+      if (codeNum >= 6 && codeNum <= 20) return "temperature";
+      if (codeNum >= 21 && codeNum <= 31) return "contamination";
+      if (codeNum === 38) return "pest";
+      if (codeNum >= 39 && codeNum <= 42) return "chemical";
+      return "other";
+    };
+    
+    // Count violations by category
+    const hasPestViolations = allRecentViolations.some(v => getViolationCategory(v.violation_code) === "pest");
+    const hasTemperatureViolations = allRecentViolations.some(v => getViolationCategory(v.violation_code) === "temperature");
+    const hasContaminationViolations = allRecentViolations.some(v => getViolationCategory(v.violation_code) === "contamination");
+    const totalViolationCount = allRecentViolations.length;
+    
+    // Count consecutive passes from most recent
+    let consecutivePasses = 0;
+    for (const insp of inspectionList) {
+      if (isPassing(insp.results)) {
+        consecutivePasses++;
+      } else {
+        break;
+      }
+    }
+    
+    // 🏆 Clean Streak - 3+ consecutive passes (only show if currently passing)
+    if (consecutivePasses >= 3 && isCurrentlyPassing) {
+      badges.push({
+        icon: <Trophy className="w-3.5 h-3.5" />,
+        label: `${consecutivePasses}x Clean Streak`,
+        color: "text-amber-700",
+        bgColor: "bg-gradient-to-r from-amber-100 to-yellow-100 border-amber-200"
+      });
+    }
+    
+    // 📈 Improving - last 3 show improvement trend (only if not currently failing)
+    if (last3.length >= 3 && !isCurrentlyFailing) {
+      const results = last3.map(i => isPassing(i.results) ? 1 : 0);
+      // Recent is better than older (e.g., [pass, pass, fail] or [pass, cond, fail])
+      if (results[0] === 1 && results[2] === 0) {
+        badges.push({
+          icon: <TrendingUp className="w-3.5 h-3.5" />,
+          label: "Improving",
+          color: "text-emerald-700",
+          bgColor: "bg-emerald-100 border-emerald-200"
+        });
+      }
+    }
+    
+    // 📉 Declining - was passing, now failing
+    if (last3.length >= 2) {
+      const results = last3.map(i => isPassing(i.results) ? 1 : 0);
+      if (results[0] === 0 && results[results.length - 1] === 1) {
+        badges.push({
+          icon: <TrendingDown className="w-3.5 h-3.5" />,
+          label: "Recent Decline",
+          color: "text-red-700",
+          bgColor: "bg-red-100 border-red-200"
+        });
+      }
+    }
+    
+    // ⚡ Recently Inspected - within last 30 days
+    if (inspectionList.length > 0) {
+      const lastDate = new Date(inspectionList[0].inspection_date);
+      const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSince <= 30) {
+        badges.push({
+          icon: <Zap className="w-3.5 h-3.5" />,
+          label: "Recently Inspected",
+          color: "text-blue-700",
+          bgColor: "bg-blue-100 border-blue-200"
+        });
+      }
+    }
+    
+    // ⚠️ Critical Issues - has critical violations in last 3 inspections
+    if (hasCriticalViolations) {
+      badges.push({
+        icon: <ShieldAlert className="w-3.5 h-3.5" />,
+        label: "Critical Violations",
+        color: "text-red-700",
+        bgColor: "bg-red-100 border-red-200"
+      });
+    }
+    
+    // 🐀 Pest Issues - has pest/rodent violations in last 3 inspections
+    if (hasPestViolations) {
+      badges.push({
+        icon: <Bug className="w-3.5 h-3.5" />,
+        label: "Pest Issues",
+        color: "text-orange-700",
+        bgColor: "bg-orange-100 border-orange-200"
+      });
+    }
+    
+    // 🌡️ Temperature Issues - has food safety/temperature violations
+    if (hasTemperatureViolations) {
+      badges.push({
+        icon: <Thermometer className="w-3.5 h-3.5" />,
+        label: "Temperature Issues",
+        color: "text-rose-700",
+        bgColor: "bg-rose-100 border-rose-200"
+      });
+    }
+    
+    // 🧼 Cleanliness Concerns - has contamination violations
+    if (hasContaminationViolations) {
+      badges.push({
+        icon: <Droplets className="w-3.5 h-3.5" />,
+        label: "Cleanliness Concerns",
+        color: "text-sky-700",
+        bgColor: "bg-sky-100 border-sky-200"
+      });
+    }
+    
+    // ✨ Spotless Record - no violations in last 3 inspections (only if currently passing)
+    if (totalViolationCount === 0 && last3.length >= 2 && isCurrentlyPassing) {
+      badges.push({
+        icon: <Sparkle className="w-3.5 h-3.5" />,
+        label: "Spotless Record",
+        color: "text-violet-700",
+        bgColor: "bg-gradient-to-r from-violet-100 to-fuchsia-100 border-violet-200"
+      });
+    }
+    
+    // 🛡️ No Critical Issues - no critical violations in last 3 and currently passing
+    if (!hasCriticalViolations && consecutivePasses >= 2 && isCurrentlyPassing) {
+      badges.push({
+        icon: <ShieldCheck className="w-3.5 h-3.5" />,
+        label: "No Critical Issues",
+        color: "text-emerald-700",
+        bgColor: "bg-emerald-100 border-emerald-200"
+      });
+    }
+    
+    // ⭐ Bounce Back - recovered from failure (only if currently passing)
+    if (last3.length >= 2 && isPassing(last3[0].results) && isFailing(last3[1].results) && isCurrentlyPassing) {
+      badges.push({
+        icon: <Star className="w-3.5 h-3.5" />,
+        label: "Bounce Back",
+        color: "text-purple-700",
+        bgColor: "bg-purple-100 border-purple-200"
+      });
+    }
+    
+    // Limit to 4 most relevant badges
+    return badges.slice(0, 4);
+  };
+  
+  // Determine status based on score thresholds (needed for badge computation)
+  // Determine status based on inspection result first, then score
+  const getStatus = (): "pass" | "conditional" | "fail" => {
+    const score = restaurant.cleanplate_score;
+    const result = restaurant.latest_result.toLowerCase();
+    
+    // Explicit fail always shows as fail
+    if (result.includes("fail")) return "fail";
+    // Conditional pass shows as conditional
+    if (result.includes("condition")) return "conditional";
+    // Very low score (< 60) despite passing is concerning
+    if (score < 60) return "conditional";
+    // Passed with score >= 60 shows as pass
+    return "pass";
+  };
+  const status = getStatus();
+  
+  const badges = useMemo(() => computeBadges(inspections, status), [inspections, status]);
 
   // Initial fetch - just 4 inspections (3 visible + 1 teaser)
   useEffect(() => {
@@ -97,18 +304,6 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
       setIsLoadingMore(false);
     }
   };
-
-  // Determine status based on result AND score
-  // Pass with low score (< 80) shows as conditional (amber) to indicate caution
-  const getStatus = () => {
-    const result = restaurant.latest_result.toLowerCase();
-    if (result.includes("fail")) return "fail";
-    if (result.includes("condition")) return "conditional";
-    // Pass but low score should show as cautionary (amber)
-    if (restaurant.cleanplate_score < 80) return "conditional";
-    return "pass";
-  };
-  const status = getStatus();
 
   const riskLabels = { 1: "High", 2: "Medium", 3: "Low" };
   const riskColors = { 1: "text-red-600 bg-red-50", 2: "text-amber-600 bg-amber-50", 3: "text-emerald-600 bg-emerald-50" };
@@ -165,11 +360,33 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         'bg-gradient-to-br from-emerald-50 to-emerald-100'
       }`}>
         <div className="max-w-4xl mx-auto px-4 py-8">
+          {/* Display Mode Selector - for testing */}
+          <div className="flex justify-end mb-4">
+            <DisplayModeSelector />
+          </div>
+          
           <div className="flex flex-col items-center">
-            <StatusBadge status={status} size="lg" />
-            <div className="my-6">
-              <ScoreDisplay score={restaurant.cleanplate_score} size="lg" showLabel />
-            </div>
+            <ScoreStatusDisplay 
+              score={restaurant.cleanplate_score} 
+              latestResult={restaurant.latest_result} 
+              size="lg" 
+              showLabel 
+            />
+            
+            {/* Achievement Badges based on inspection history */}
+            {badges.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2 mt-4">
+                {badges.map((badge, index) => (
+                  <div
+                    key={index}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${badge.bgColor} ${badge.color} shadow-sm`}
+                  >
+                    {badge.icon}
+                    {badge.label}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>

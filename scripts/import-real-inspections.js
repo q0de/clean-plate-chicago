@@ -23,15 +23,17 @@ function parseViolations(violationsText) {
   const parts = violationsText.split(' | ');
   
   for (const part of parts) {
-    const match = part.match(/^(\d+)\.\s*([^-]+)\s*-\s*Comments:\s*(.*)$/i);
+    // More flexible regex that handles dashes in description
+    // Match: "CODE. DESCRIPTION - Comments: COMMENT"
+    const match = part.match(/^(\d+)\.\s*(.+?)\s*-\s*Comments:\s*(.*)$/i);
     if (match) {
       const code = match[1];
       const description = match[2].trim();
       const comment = match[3].trim();
       
-      // Critical violations are typically codes 1-14, 16-29 in Chicago's system
-      const criticalCodes = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','16','17','18','19','20','21','22','23','24','25','26','27','28','29'];
-      const isCritical = criticalCodes.includes(code);
+      // Critical violations are typically codes 1-29 (excluding 15) in Chicago's system
+      const codeNum = parseInt(code);
+      const isCritical = codeNum >= 1 && codeNum <= 29 && codeNum !== 15;
       
       violations.push({
         violation_code: code,
@@ -103,16 +105,51 @@ function parseRiskLevel(riskStr) {
   return 2;
 }
 
+// Configuration - adjust these to control how much history to import
+const MONTHS_OF_HISTORY = 6; // Change to 12 for a full year
+const RECORDS_PER_PAGE = 1000;
+const MAX_PAGES = 10; // Safety limit: max 10,000 records
+
 async function importData() {
   console.log('Fetching inspection data from Chicago Data Portal...');
+  console.log(`Importing ${MONTHS_OF_HISTORY} months of history...`);
   
-  // Fetch recent inspections with violations
-  const url = 'https://data.cityofchicago.org/resource/4ijn-s7e5.json?$limit=100&$order=inspection_date DESC&$where=inspection_date > \'2025-11-01\'';
+  // Calculate date range
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - MONTHS_OF_HISTORY);
+  const startDateStr = startDate.toISOString().split('T')[0];
   
-  const res = await fetch(url);
-  const data = await res.json();
+  console.log(`Date range: ${startDateStr} to present`);
   
-  console.log(`Fetched ${data.length} inspection records`);
+  // Fetch inspections with pagination
+  let allData = [];
+  let offset = 0;
+  let page = 0;
+  
+  while (page < MAX_PAGES) {
+    const url = `https://data.cityofchicago.org/resource/4ijn-s7e5.json?$limit=${RECORDS_PER_PAGE}&$offset=${offset}&$order=inspection_date DESC&$where=inspection_date >= '${startDateStr}'`;
+    
+    console.log(`Fetching page ${page + 1}...`);
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (data.length === 0) break;
+    
+    allData = allData.concat(data);
+    console.log(`  Got ${data.length} records (total: ${allData.length})`);
+    
+    if (data.length < RECORDS_PER_PAGE) break; // Last page
+    
+    offset += RECORDS_PER_PAGE;
+    page++;
+    
+    // Small delay to be nice to the API
+    await new Promise(r => setTimeout(r, 500));
+  }
+  
+  const data = allData;
+  console.log(`Fetched ${data.length} total inspection records`);
   
   // Group by license number to get unique establishments
   const establishmentMap = new Map();
@@ -152,11 +189,17 @@ async function importData() {
   
   console.log(`Found ${establishmentMap.size} unique establishments`);
   
-  // Clear existing sample data
-  console.log('Clearing existing data...');
-  await supabase.from('violations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('inspections').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('establishments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  // Option to clear existing data (set to false for incremental updates)
+  const CLEAR_EXISTING = process.env.CLEAR_DATA === 'true';
+  
+  if (CLEAR_EXISTING) {
+    console.log('Clearing existing data...');
+    await supabase.from('violations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('inspections').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('establishments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  } else {
+    console.log('Incremental import mode (set CLEAR_DATA=true to clear first)');
+  }
   
   let establishmentCount = 0;
   let inspectionCount = 0;
@@ -188,10 +231,10 @@ async function importData() {
     score -= criticalViolations * 3; // Extra -3 per critical
     score = Math.max(0, Math.min(100, Math.round(score)));
     
-    // Insert establishment
+    // Upsert establishment (insert or update if exists)
     const { data: estData, error: estError } = await supabase
       .from('establishments')
-      .insert({
+      .upsert({
         license_number: est.license_number,
         dba_name: est.dba_name,
         aka_name: est.aka_name,
@@ -210,25 +253,28 @@ async function importData() {
         latest_inspection_date: latest.inspection_date,
         total_inspections: sortedInspections.length,
         pass_streak: countPassStreak(sortedInspections)
+      }, { 
+        onConflict: 'license_number',
+        ignoreDuplicates: false 
       })
       .select()
       .single();
     
     if (estError) {
-      console.error(`Error inserting ${est.dba_name}:`, estError.message);
+      console.error(`Error upserting ${est.dba_name}:`, estError.message);
       continue;
     }
     
     establishmentCount++;
     
-    // Insert inspections
+    // Insert inspections (skip if already exists)
     for (const insp of sortedInspections) {
       const violationCountNum = insp.violations.length;
       const criticalCountNum = insp.violations.filter(v => v.is_critical).length;
       
       const { data: inspData, error: inspError } = await supabase
         .from('inspections')
-        .insert({
+        .upsert({
           establishment_id: estData.id,
           inspection_id: insp.inspection_id,
           inspection_date: insp.inspection_date,
@@ -237,14 +283,22 @@ async function importData() {
           raw_violations: insp.raw_violations,
           violation_count: violationCountNum,
           critical_count: criticalCountNum
+        }, {
+          onConflict: 'inspection_id',
+          ignoreDuplicates: true // Skip if inspection already exists
         })
         .select()
         .single();
       
       if (inspError) {
-        console.error(`Error inserting inspection:`, inspError.message);
+        // Skip duplicate key errors silently
+        if (!inspError.message.includes('duplicate') && !inspError.message.includes('0 rows')) {
+          console.error(`Error inserting inspection:`, inspError.message);
+        }
         continue;
       }
+      
+      if (!inspData) continue; // Skipped due to duplicate
       
       inspectionCount++;
       
@@ -272,6 +326,21 @@ async function importData() {
   console.log(`Establishments: ${establishmentCount}`);
   console.log(`Inspections: ${inspectionCount}`);
   console.log(`Violations: ${violationCount}`);
+  
+  // Assign neighborhoods to new establishments
+  console.log('\nAssigning neighborhoods to establishments...');
+  const { error: neighError } = await supabase.rpc('assign_neighborhoods_by_distance');
+  if (neighError) {
+    console.log('Note: Run assign-neighborhoods.js separately to assign neighborhoods');
+  } else {
+    console.log('Neighborhoods assigned!');
+  }
+  
+  // Update neighborhood statistics
+  console.log('Updating neighborhood stats...');
+  await supabase.rpc('update_neighborhood_stats').catch(() => {
+    console.log('Note: Neighborhood stats update skipped (run manually if needed)');
+  });
 }
 
 function countPassStreak(inspections) {

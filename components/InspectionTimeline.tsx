@@ -219,63 +219,75 @@ export function InspectionTimeline({
                     </div>
 
                     {/* Expand icon */}
-                    {inspection.violations.length > 0 && (
-                      <div className="flex-shrink-0 mt-1">
-                        {isExpanded ? (
-                          <ChevronDown className="w-5 h-5 text-gray-400" />
-                        ) : (
-                          <ChevronRight className="w-5 h-5 text-gray-400" />
-                        )}
-                      </div>
-                    )}
+                    <div className="flex-shrink-0 mt-1">
+                      {isExpanded ? (
+                        <ChevronDown className="w-5 h-5 text-gray-400" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
                   </button>
 
-                  {/* Expanded violations */}
-                  {isExpanded && inspection.violations.length > 0 && (
+                  {/* Expanded details */}
+                  {isExpanded && (
                     <div className="px-4 pb-4 border-t border-gray-100 pt-3">
-                      <div className="flex items-center gap-2 mb-3">
-                        <FileText className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-700">Violations Found</span>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {inspection.violations.map((violation) => {
-                          const category = getViolationCategory(violation.violation_code);
+                      {inspection.violations.length > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-3">
+                            <FileText className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-700">Violations Found</span>
+                          </div>
                           
-                          return (
-                            <div
-                              key={violation.id}
-                              className={`p-3 rounded-lg border ${
-                                violation.is_critical
-                                  ? "border-red-200 bg-red-50"
-                                  : "border-gray-200 bg-gray-50"
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 flex-wrap mb-2">
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${category.bgColor} ${category.textColor} flex items-center gap-1`}>
-                                  {category.emoji} {category.label}
-                                </span>
-                                <span className="text-xs font-medium text-gray-500 px-2 py-0.5 rounded-full border border-gray-300">
-                                  #{violation.violation_code}
-                                </span>
-                                {violation.is_critical && (
-                                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white">
-                                    🚨 CRITICAL
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm text-gray-700">
-                                {violation.plain_english || violation.violation_description}
-                              </p>
-                              {violation.violation_comment && (
-                                <p className="text-xs text-gray-500 mt-2 italic">
-                                  "{violation.violation_comment}"
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
+                          <div className="space-y-2">
+                            {inspection.violations.map((violation) => {
+                              const category = getViolationCategory(violation.violation_code);
+                              
+                              return (
+                                <div
+                                  key={violation.id}
+                                  className={`p-3 rounded-lg border ${
+                                    violation.is_critical
+                                      ? "border-red-200 bg-red-50"
+                                      : "border-gray-200 bg-gray-50"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${category.bgColor} ${category.textColor} flex items-center gap-1`}>
+                                      {category.emoji} {category.label}
+                                    </span>
+                                    <span className="text-xs font-medium text-gray-500 px-2 py-0.5 rounded-full border border-gray-300">
+                                      #{violation.violation_code}
+                                    </span>
+                                    {violation.is_critical && (
+                                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white">
+                                        🚨 CRITICAL
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-700">
+                                    {violation.plain_english || violation.violation_description}
+                                  </p>
+                                  {violation.violation_comment && (
+                                    <p className="text-xs text-gray-500 mt-2 italic">
+                                      "{violation.violation_comment}"
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+                          <div className="p-2 bg-emerald-100 rounded-full">
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-emerald-800">No violations recorded</p>
+                            <p className="text-xs text-emerald-600">This inspection had no documented issues</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </CardBody>

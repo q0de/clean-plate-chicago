@@ -98,6 +98,42 @@ function generateInspectionSummary(
   return summary;
 }
 
+// Point-in-polygon check using ray casting algorithm
+function isPointInPolygon(point: [number, number], polygon: number[][]): boolean {
+  const [x, y] = point;
+  let inside = false;
+  
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+    
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  
+  return inside;
+}
+
+// Check if point is in any polygon of a MultiPolygon or Polygon
+function isPointInGeoJSONGeometry(
+  point: [number, number], 
+  geometry: { type: string; coordinates: number[][][] | number[][][][] }
+): boolean {
+  if (geometry.type === "Polygon") {
+    // For Polygon, check against the outer ring (first array)
+    return isPointInPolygon(point, geometry.coordinates[0] as number[][]);
+  } else if (geometry.type === "MultiPolygon") {
+    // For MultiPolygon, check if point is in any of the polygons
+    for (const polygon of geometry.coordinates as number[][][][]) {
+      if (isPointInPolygon(point, polygon[0])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -105,6 +141,8 @@ export async function GET(request: NextRequest) {
     const lng = parseFloat(searchParams.get("lng") || "0");
     const radiusMiles = parseFloat(searchParams.get("radius_miles") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
+    const neighborhoodSlug = searchParams.get("neighborhood_slug");
+    const neighborhoodBoundary = searchParams.get("neighborhood_boundary"); // JSON string of boundary
 
     if (!lat || !lng) {
       return NextResponse.json(
@@ -113,22 +151,73 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase.rpc("nearby_establishments", {
-      lat,
-      lng,
-      radius_miles: radiusMiles,
-    });
+    // If neighborhood slug provided, filter by neighborhood_id instead of location
+    if (neighborhoodSlug) {
+      // First get the neighborhood ID
+      const { data: neighborhood } = await supabase
+        .from("neighborhoods")
+        .select("id")
+        .eq("slug", neighborhoodSlug)
+        .single();
+      
+      if (neighborhood) {
+        const { data: neighEstablishments, error: neighError } = await supabase
+          .from("establishments")
+          .select("*, neighborhood:neighborhoods(name, slug)")
+          .eq("neighborhood_id", neighborhood.id)
+          .not("neighborhood_id", "is", null)
+          .order("cleanplate_score", { ascending: false })
+          .limit(limit);
+        
+        if (neighError) {
+          console.error("Neighborhood establishments error:", neighError);
+          return NextResponse.json(
+            { error: "Failed to fetch neighborhood establishments" },
+            { status: 500 }
+          );
+        }
+        
+        // Continue with the enhanced data flow below
+        var filteredData = neighEstablishments || [];
+      } else {
+        var filteredData: Record<string, unknown>[] = [];
+      }
+    } else {
+      // Normal nearby search
+      const { data, error } = await supabase.rpc("nearby_establishments", {
+        lat,
+        lng,
+        radius_miles: radiusMiles,
+      });
 
-    if (error) {
-      console.error("Nearby search error:", error);
-      return NextResponse.json(
-        { error: "Failed to find nearby establishments" },
-        { status: 500 }
-      );
+      if (error) {
+        console.error("Nearby search error:", error);
+        return NextResponse.json(
+          { error: "Failed to find nearby establishments" },
+          { status: 500 }
+        );
+      }
+
+      var filteredData = data || [];
+      
+      // Legacy: Filter by neighborhood boundary if provided (fallback)
+      if (neighborhoodBoundary && !neighborhoodSlug) {
+        try {
+          const geometry = JSON.parse(neighborhoodBoundary);
+          filteredData = filteredData.filter((item: Record<string, unknown>) => {
+            const itemLat = typeof item.latitude === 'string' ? parseFloat(item.latitude) : item.latitude as number;
+            const itemLng = typeof item.longitude === 'string' ? parseFloat(item.longitude) : item.longitude as number;
+            if (!itemLat || !itemLng) return false;
+            return isPointInGeoJSONGeometry([itemLng, itemLat], geometry);
+          });
+        } catch (e) {
+          console.error("Failed to parse neighborhood boundary:", e);
+        }
+      }
     }
 
     // Get establishment IDs to fetch latest inspection details
-    const establishmentIds = (data || []).map((item: Record<string, unknown>) => item.id);
+    const establishmentIds = filteredData.map((item: Record<string, unknown>) => item.id);
     
     // Fetch latest inspection for each establishment
     let inspectionMap: Record<string, { inspection_type: string; raw_violations: string; critical_count: number; violation_count: number }> = {};
@@ -151,13 +240,50 @@ export async function GET(request: NextRequest) {
     }
 
     // Enhance each establishment with AI summary
-    const limitedData = (data || []).slice(0, limit);
+    const limitedData = filteredData.slice(0, limit);
+    
+    // Fetch neighborhood names and slugs for establishments that don't have them (from RPC function)
+    const establishmentsNeedingNeighborhoods = limitedData.filter(
+      (item: Record<string, unknown>) => !item.neighborhood && item.neighborhood_id
+    );
+    const neighborhoodIds = establishmentsNeedingNeighborhoods.map(
+      (item: Record<string, unknown>) => item.neighborhood_id
+    ).filter(Boolean);
+    
+    let neighborhoodMap: Record<string, { name: string; slug: string }> = {};
+    if (neighborhoodIds.length > 0) {
+      const { data: neighborhoods } = await supabase
+        .from("neighborhoods")
+        .select("id, name, slug")
+        .in("id", neighborhoodIds);
+      
+      if (neighborhoods) {
+        neighborhoods.forEach((n) => {
+          neighborhoodMap[n.id] = { name: n.name, slug: n.slug };
+        });
+      }
+    }
     
     // Generate AI summaries in parallel
     const enhanced = await Promise.all(
       limitedData.map(async (item: Record<string, unknown>) => {
         const inspection = inspectionMap[item.id as string];
         const themes = inspection ? extractViolationThemes(inspection.raw_violations) : [];
+        
+        // Extract neighborhood name and slug from joined data or fetch from map
+        let neighborhoodName: string | null = null;
+        let neighborhoodSlug: string | null = null;
+        if (item.neighborhood && typeof item.neighborhood === 'object') {
+          // From joined query: neighborhood: { name: string, slug?: string }
+          const neighborhood = item.neighborhood as { name: string; slug?: string };
+          neighborhoodName = neighborhood.name;
+          neighborhoodSlug = neighborhood.slug || null;
+        } else if (item.neighborhood_id && neighborhoodMap[item.neighborhood_id as string]) {
+          // From RPC function: fetch from map
+          const neighborhood = neighborhoodMap[item.neighborhood_id as string];
+          neighborhoodName = neighborhood.name;
+          neighborhoodSlug = neighborhood.slug;
+        }
         
         // Generate real AI summary
         let aiSummary: string | null = null;
@@ -185,10 +311,15 @@ export async function GET(request: NextRequest) {
           );
         }
         
+        // Remove the nested neighborhood object and add flat neighborhood field
+        const { neighborhood: _, ...restItem } = item;
+        
         return {
-          ...item,
+          ...restItem,
           latitude: typeof item.latitude === 'string' ? parseFloat(item.latitude) : item.latitude,
           longitude: typeof item.longitude === 'string' ? parseFloat(item.longitude) : item.longitude,
+          neighborhood: neighborhoodName,
+          neighborhood_slug: neighborhoodSlug,
           inspection_type: inspection?.inspection_type || null,
           violation_count: inspection?.violation_count || 0,
           critical_count: inspection?.critical_count || 0,
@@ -204,7 +335,8 @@ export async function GET(request: NextRequest) {
         total: enhanced.length,
         limit,
         offset: 0,
-        has_more: (data?.length || 0) > limit,
+        has_more: filteredData.length > limit,
+        neighborhood_filtered: !!neighborhoodBoundary,
       },
     });
   } catch (error) {
