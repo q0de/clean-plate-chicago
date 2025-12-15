@@ -131,12 +131,12 @@ export async function GET(request: NextRequest) {
     const establishmentIds = (data || []).map((item: Record<string, unknown>) => item.id);
     
     // Fetch latest inspection for each establishment
-    let inspectionMap: Record<string, { inspection_type: string; raw_violations: string; critical_count: number }> = {};
+    let inspectionMap: Record<string, { inspection_type: string; raw_violations: string; critical_count: number; violation_count: number }> = {};
     
     if (establishmentIds.length > 0) {
       const { data: inspections } = await supabase
         .from("inspections")
-        .select("establishment_id, inspection_type, raw_violations, critical_count")
+        .select("establishment_id, inspection_type, raw_violations, critical_count, violation_count")
         .in("establishment_id", establishmentIds)
         .order("inspection_date", { ascending: false });
       
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
             facility_type: (item.facility_type as string) || "Restaurant",
             latest_result: item.latest_result as string,
             cleanplate_score: (item.cleanplate_score as number) || 0,
-            violation_count: (item.violation_count as number) || 0,
+            violation_count: inspection?.violation_count || 0,
             critical_count: inspection?.critical_count || 0,
             raw_violations: inspection?.raw_violations || null,
             inspection_type: inspection?.inspection_type || null,
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
           aiSummary = generateInspectionSummary(
             item.latest_result as string,
             inspection?.inspection_type || null,
-            (item.violation_count as number) || 0,
+            inspection?.violation_count || 0,
             inspection?.critical_count || 0,
             themes
           );
@@ -190,6 +190,7 @@ export async function GET(request: NextRequest) {
           latitude: typeof item.latitude === 'string' ? parseFloat(item.latitude) : item.latitude,
           longitude: typeof item.longitude === 'string' ? parseFloat(item.longitude) : item.longitude,
           inspection_type: inspection?.inspection_type || null,
+          violation_count: inspection?.violation_count || 0,
           critical_count: inspection?.critical_count || 0,
           violation_themes: themes,
           ai_summary: aiSummary,
