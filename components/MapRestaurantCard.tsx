@@ -74,11 +74,16 @@ export function MapRestaurantCard({
   onHover,
   onClick,
 }: MapRestaurantCardProps) {
-  const status = restaurant.latest_result.toLowerCase().includes("fail")
-    ? "fail"
-    : restaurant.latest_result.toLowerCase().includes("condition")
-    ? "conditional"
-    : "pass";
+  // Determine status based on result AND score
+  // Pass with low score (< 80) shows as conditional (amber) to indicate caution
+  const getStatus = () => {
+    const result = restaurant.latest_result.toLowerCase();
+    if (result.includes("fail")) return "fail";
+    if (result.includes("condition")) return "conditional";
+    if (restaurant.cleanplate_score < 80) return "conditional";
+    return "pass";
+  };
+  const status = getStatus();
 
   const statusColors = {
     pass: "border-emerald-500 bg-emerald-50",

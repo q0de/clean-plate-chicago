@@ -98,11 +98,17 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
     }
   };
 
-  const status = restaurant.latest_result.toLowerCase().includes("fail")
-    ? "fail"
-    : restaurant.latest_result.toLowerCase().includes("condition")
-    ? "conditional"
-    : "pass";
+  // Determine status based on result AND score
+  // Pass with low score (< 80) shows as conditional (amber) to indicate caution
+  const getStatus = () => {
+    const result = restaurant.latest_result.toLowerCase();
+    if (result.includes("fail")) return "fail";
+    if (result.includes("condition")) return "conditional";
+    // Pass but low score should show as cautionary (amber)
+    if (restaurant.cleanplate_score < 80) return "conditional";
+    return "pass";
+  };
+  const status = getStatus();
 
   const riskLabels = { 1: "High", 2: "Medium", 3: "Low" };
   const riskColors = { 1: "text-red-600 bg-red-50", 2: "text-amber-600 bg-amber-50", 3: "text-emerald-600 bg-emerald-50" };
