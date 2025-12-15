@@ -1,8 +1,14 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization - only create client when needed
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    return null;
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 // In-memory cache for AI summaries (in production, use Redis or database)
 const summaryCache = new Map<string, { summary: string; timestamp: number }>();
@@ -18,6 +24,12 @@ interface InspectionData {
   raw_violations: string | null;
   inspection_type: string | null;
   latest_inspection_date: string | null;
+  recent_inspections?: Array<{
+    inspection_date: string;
+    results: string;
+    violation_count: number;
+    critical_count: number;
+  }>;
 }
 
 export async function generateAISummary(data: InspectionData): Promise<string> {
@@ -31,7 +43,8 @@ export async function generateAISummary(data: InspectionData): Promise<string> {
   }
 
   // If no API key, return fallback
-  if (!process.env.OPENAI_API_KEY) {
+  const openai = getOpenAIClient();
+  if (!openai) {
     return generateFallbackSummary(data);
   }
 
@@ -43,14 +56,14 @@ export async function generateAISummary(data: InspectionData): Promise<string> {
       messages: [
         {
           role: "system",
-          content: `You are a helpful assistant that writes concise, informative 1-2 sentence summaries of restaurant health inspection results for consumers. Be direct, factual, and focus on what matters most to someone deciding whether to eat there. Don't be overly alarming but be honest. Use plain language. Never exceed 150 characters.`
+          content: `You are a helpful assistant that writes concise, informative 2-3 sentence summaries of restaurant health inspection results for consumers. Be direct, factual, and focus on what matters most to someone deciding whether to eat there. Include context about trends if relevant (improving, declining, consistent issues). Don't be overly alarming but be honest. Use plain language. Aim for 200-300 characters.`
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 60,
+      max_tokens: 150,
       temperature: 0.7,
     });
 
@@ -69,22 +82,31 @@ export async function generateAISummary(data: InspectionData): Promise<string> {
 function buildPrompt(data: InspectionData): string {
   const parts = [
     `Restaurant: ${data.dba_name} (${data.facility_type})`,
-    `Result: ${data.latest_result}`,
-    `Score: ${data.cleanplate_score}/100`,
-    `Violations: ${data.violation_count} total, ${data.critical_count} critical`,
+    `Latest Inspection Result: ${data.latest_result}`,
+    `CleanPlate Score: ${data.cleanplate_score}/100`,
+    `Latest Violations: ${data.violation_count} total, ${data.critical_count} critical`,
   ];
 
   if (data.inspection_type) {
     parts.push(`Inspection type: ${data.inspection_type}`);
   }
 
-  if (data.raw_violations) {
-    // Truncate violations to avoid token limits
-    const truncated = data.raw_violations.slice(0, 500);
-    parts.push(`Key issues: ${truncated}`);
+  // Include recent inspection history for trend context
+  if (data.recent_inspections && data.recent_inspections.length > 1) {
+    const history = data.recent_inspections.slice(0, 3).map((insp, idx) => {
+      const date = new Date(insp.inspection_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      return `${idx === 0 ? 'Latest' : idx === 1 ? 'Previous' : 'Earlier'} (${date}): ${insp.results} - ${insp.violation_count} violations (${insp.critical_count} critical)`;
+    }).join('\n');
+    parts.push(`\nRecent Inspection History:\n${history}`);
   }
 
-  parts.push(`Write a brief consumer-friendly summary (1-2 sentences, max 150 chars).`);
+  if (data.raw_violations) {
+    // Increase truncation limit for more context
+    const truncated = data.raw_violations.slice(0, 1000);
+    parts.push(`\nKey Violation Details: ${truncated}`);
+  }
+
+  parts.push(`\nWrite a consumer-friendly summary (2-3 sentences, 200-300 chars) that highlights the most important information for someone deciding whether to eat here. Include trend context if the inspection history shows improvement or decline.`);
 
   return parts.join("\n");
 }

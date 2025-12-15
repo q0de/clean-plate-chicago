@@ -3,6 +3,7 @@
 import { HeroUIProvider } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { DisplayModeProvider } from "@/lib/display-mode-context";
+import { StatusBadgeProvider } from "@/lib/status-badge-context";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -10,7 +11,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <HeroUIProvider navigate={router.push}>
       <DisplayModeProvider>
-        {children}
+        <StatusBadgeProvider>
+          {children}
+        </StatusBadgeProvider>
       </DisplayModeProvider>
     </HeroUIProvider>
   );

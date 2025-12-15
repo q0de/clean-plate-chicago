@@ -269,7 +269,7 @@ export function InspectionTimeline({
                                   </p>
                                   {violation.violation_comment && (
                                     <p className="text-xs text-gray-500 mt-2 italic">
-                                      "{violation.violation_comment}"
+                                      &ldquo;{violation.violation_comment}&rdquo;
                                     </p>
                                   )}
                                 </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Search, ArrowUpDown, Loader2, X, MapPin, TrendingUp, Building2, ChevronRight, Clock, AlertTriangle, Calendar } from "lucide-react";
 import { NeighborhoodChips } from "./NeighborhoodChips";
 import { MapRestaurantCard } from "./MapRestaurantCard";
-import { StatusBadge } from "./StatusBadge";
+import { DisplayModeSelector } from "./ScoreStatusDisplay";
 import Link from "next/link";
 
 interface Neighborhood {
@@ -337,6 +337,11 @@ export function MapSidebar({
           selectedNeighborhood={selectedNeighborhood}
           onSelect={onNeighborhoodSelect}
         />
+      </div>
+
+      {/* Display Mode Selector */}
+      <div className="px-4 py-3 bg-white border-b border-gray-200">
+        <DisplayModeSelector />
       </div>
 
       {/* Sort & Count */}

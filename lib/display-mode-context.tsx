@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-export type DisplayMode = "A" | "B" | "C" | "D" | "E";
+export type DisplayMode = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J";
 
 export const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
   A: "Current (Separate)",
@@ -10,6 +10,11 @@ export const DISPLAY_MODE_LABELS: Record<DisplayMode, string> = {
   C: "Status-Colored Score",
   D: "Dual Indicator",
   E: "Contextual Labels",
+  F: "Dual Rings Side-by-Side",
+  G: "Stacked with Labels",
+  H: "Split Card Layout",
+  I: "Dual Rings with Status Center",
+  J: "Horizontal Comparison",
 };
 
 export const DISPLAY_MODE_DESCRIPTIONS: Record<DisplayMode, string> = {
@@ -18,6 +23,11 @@ export const DISPLAY_MODE_DESCRIPTIONS: Record<DisplayMode, string> = {
   C: "Score ring color matches inspection result (green if passed)",
   D: "Score ring with embedded result icon overlay",
   E: "Both metrics with explanatory labels beneath each",
+  F: "Two score rings displayed horizontally - Latest Inspection and CleanPlate",
+  G: "Latest Inspection Score on top, CleanPlate Score below with labels",
+  H: "Card divided vertically - Latest Inspection left, CleanPlate right",
+  I: "Two rings with status badge positioned between them",
+  J: "Both scores in horizontal bar layout with clear labels",
 };
 
 interface DisplayModeContextType {
@@ -30,13 +40,13 @@ const DisplayModeContext = createContext<DisplayModeContextType | undefined>(und
 const STORAGE_KEY = "cleanplate-display-mode";
 
 export function DisplayModeProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<DisplayMode>("A");
+  const [mode, setModeState] = useState<DisplayMode>("J");
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && ["A", "B", "C", "D", "E"].includes(stored)) {
+    if (stored && ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"].includes(stored)) {
       setModeState(stored as DisplayMode);
     }
     setIsHydrated(true);

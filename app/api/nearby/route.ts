@@ -134,6 +134,8 @@ function isPointInGeoJSONGeometry(
   return false;
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -150,6 +152,9 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Declare filteredData once with consistent type
+    let filteredData: Record<string, unknown>[] = [];
 
     // If neighborhood slug provided, filter by neighborhood_id instead of location
     if (neighborhoodSlug) {
@@ -178,9 +183,7 @@ export async function GET(request: NextRequest) {
         }
         
         // Continue with the enhanced data flow below
-        var filteredData = neighEstablishments || [];
-      } else {
-        var filteredData: Record<string, unknown>[] = [];
+        filteredData = (neighEstablishments || []) as Record<string, unknown>[];
       }
     } else {
       // Normal nearby search
@@ -198,7 +201,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      var filteredData = data || [];
+      filteredData = (data || []) as Record<string, unknown>[];
       
       // Legacy: Filter by neighborhood boundary if provided (fallback)
       if (neighborhoodBoundary && !neighborhoodSlug) {

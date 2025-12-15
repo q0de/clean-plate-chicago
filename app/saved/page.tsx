@@ -2,6 +2,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { EmptyState } from "@/components/EmptyState";
 import { Bookmark } from "lucide-react";
 
+export const dynamic = 'force-dynamic';
+
 export default function SavedPage() {
   return (
     <div className="min-h-screen pb-20">
@@ -14,7 +16,6 @@ export default function SavedPage() {
       <div className="container mx-auto px-4 py-8">
         <EmptyState
           type="no-results"
-          onAction={() => {}}
         />
         <p className="text-center text-default-500 mt-4">
           This feature is coming soon. You&apos;ll be able to save your favorite restaurants for quick access.

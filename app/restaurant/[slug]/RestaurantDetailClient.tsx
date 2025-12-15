@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ScoreStatusDisplay, DisplayModeSelector } from "@/components/ScoreStatusDisplay";
+import { ScoreStatusDisplay } from "@/components/ScoreStatusDisplay";
 import { ScoreTrendChart } from "@/components/ScoreTrendChart";
 import { InspectionTimeline, TimelineInspection } from "@/components/InspectionTimeline";
-import { Map } from "@/components/Map";
+import { Map as MapComponent } from "@/components/Map";
 import { BottomNav } from "@/components/BottomNav";
-import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle } from "lucide-react";
+import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle, AlertCircle, Wrench, Utensils, FileText, Hand } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Restaurant {
@@ -35,6 +35,66 @@ interface RestaurantDetailClientProps {
 
 const INITIAL_INSPECTION_COUNT = 4; // 3 visible + 1 teaser
 const LOAD_MORE_COUNT = 5;
+
+// Map violation theme strings to icons and colors (matching violation category badges)
+function getThemeConfig(theme: string): {
+  icon: typeof AlertTriangle;
+  label: string;
+  bgColor: string;
+  textColor: string;
+} {
+  // Remove emoji from theme string
+  const label = theme.replace(/^[\u{1F300}-\u{1F9FF}]+\s*/u, '').trim();
+  const lowerTheme = theme.toLowerCase();
+  
+  // Temperature control
+  if (lowerTheme.includes('temperature')) {
+    return { icon: Thermometer, label, bgColor: "bg-red-100", textColor: "text-red-700" };
+  }
+  
+  // Equipment
+  if (lowerTheme.includes('equipment')) {
+    return { icon: Wrench, label, bgColor: "bg-blue-100", textColor: "text-blue-700" };
+  }
+  
+  // Cleanliness / Contamination
+  if (lowerTheme.includes('cleanliness') || lowerTheme.includes('contamination')) {
+    return { icon: Droplets, label, bgColor: "bg-red-100", textColor: "text-red-700" };
+  }
+  
+  // Storage
+  if (lowerTheme.includes('storage')) {
+    return { icon: Utensils, label, bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  
+  // Pest issues
+  if (lowerTheme.includes('pest')) {
+    return { icon: Bug, label, bgColor: "bg-red-100", textColor: "text-red-700" };
+  }
+  
+  // Documentation
+  if (lowerTheme.includes('documentation')) {
+    return { icon: FileText, label, bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  
+  // Handwashing
+  if (lowerTheme.includes('handwash')) {
+    return { icon: Hand, label, bgColor: "bg-red-100", textColor: "text-red-700" };
+  }
+  
+  // Food labeling
+  if (lowerTheme.includes('labeling') || lowerTheme.includes('label')) {
+    return { icon: Utensils, label, bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  
+  // Chemical safety / Cross-contamination
+  if (lowerTheme.includes('chemical') || lowerTheme.includes('cross-contamination')) {
+    return { icon: AlertTriangle, label, bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  
+  // Default
+  return { icon: AlertTriangle, label, bgColor: "bg-gray-100", textColor: "text-gray-700" };
+}
 
 export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientProps) {
   const router = useRouter();
@@ -132,7 +192,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
           icon: <TrendingUp className="w-3.5 h-3.5" />,
           label: "Improving",
           color: "text-emerald-700",
-          bgColor: "bg-emerald-100 border-emerald-200"
+          bgColor: "bg-emerald-100"
         });
       }
     }
@@ -145,7 +205,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
           icon: <TrendingDown className="w-3.5 h-3.5" />,
           label: "Recent Decline",
           color: "text-red-700",
-          bgColor: "bg-red-100 border-red-200"
+          bgColor: "bg-red-100"
         });
       }
     }
@@ -159,7 +219,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
           icon: <Zap className="w-3.5 h-3.5" />,
           label: "Recently Inspected",
           color: "text-blue-700",
-          bgColor: "bg-blue-100 border-blue-200"
+          bgColor: "bg-blue-100"
         });
       }
     }
@@ -170,39 +230,12 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         icon: <ShieldAlert className="w-3.5 h-3.5" />,
         label: "Critical Violations",
         color: "text-red-700",
-        bgColor: "bg-red-100 border-red-200"
+        bgColor: "bg-red-100"
       });
     }
     
-    // 🐀 Pest Issues - has pest/rodent violations in last 3 inspections
-    if (hasPestViolations) {
-      badges.push({
-        icon: <Bug className="w-3.5 h-3.5" />,
-        label: "Pest Issues",
-        color: "text-orange-700",
-        bgColor: "bg-orange-100 border-orange-200"
-      });
-    }
-    
-    // 🌡️ Temperature Issues - has food safety/temperature violations
-    if (hasTemperatureViolations) {
-      badges.push({
-        icon: <Thermometer className="w-3.5 h-3.5" />,
-        label: "Temperature Issues",
-        color: "text-rose-700",
-        bgColor: "bg-rose-100 border-rose-200"
-      });
-    }
-    
-    // 🧼 Cleanliness Concerns - has contamination violations
-    if (hasContaminationViolations) {
-      badges.push({
-        icon: <Droplets className="w-3.5 h-3.5" />,
-        label: "Cleanliness Concerns",
-        color: "text-sky-700",
-        bgColor: "bg-sky-100 border-sky-200"
-      });
-    }
+    // Note: Violation-specific badges (Pest Issues, Temperature Issues, Cleanliness Concerns)
+    // are NOT shown here - they only appear in the AI Summary section as violation theme badges
     
     // ✨ Spotless Record - no violations in last 3 inspections (only if currently passing)
     if (totalViolationCount === 0 && last3.length >= 2 && isCurrentlyPassing) {
@@ -210,7 +243,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         icon: <Sparkle className="w-3.5 h-3.5" />,
         label: "Spotless Record",
         color: "text-violet-700",
-        bgColor: "bg-gradient-to-r from-violet-100 to-fuchsia-100 border-violet-200"
+        bgColor: "bg-gradient-to-r from-violet-100 to-fuchsia-100"
       });
     }
     
@@ -220,7 +253,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         icon: <ShieldCheck className="w-3.5 h-3.5" />,
         label: "No Critical Issues",
         color: "text-emerald-700",
-        bgColor: "bg-emerald-100 border-emerald-200"
+        bgColor: "bg-emerald-100"
       });
     }
     
@@ -230,8 +263,35 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         icon: <Star className="w-3.5 h-3.5" />,
         label: "Bounce Back",
         color: "text-purple-700",
-        bgColor: "bg-purple-100 border-purple-200"
+        bgColor: "bg-purple-100"
       });
+    }
+    
+    // 🔄 Ongoing Issues - same violation codes appearing in 2+ of the last 3 inspections
+    if (last3.length >= 2 && allRecentViolations.length > 0) {
+      // Group violations by code across all inspections
+      const violationCodeCounts = new Map<string, number>();
+      last3.forEach(insp => {
+        const codes = new Set<string>();
+        insp.violations?.forEach(v => {
+          codes.add(v.violation_code);
+        });
+        codes.forEach(code => {
+          violationCodeCounts.set(code, (violationCodeCounts.get(code) || 0) + 1);
+        });
+      });
+      
+      // Check if any violation code appears in 2+ inspections
+      const hasOngoingIssues = Array.from(violationCodeCounts.values()).some(count => count >= 2);
+      
+      if (hasOngoingIssues) {
+        badges.push({
+          icon: <AlertCircle className="w-3.5 h-3.5" />,
+          label: "Ongoing Issues",
+          color: "text-red-700",
+          bgColor: "bg-red-100"
+        });
+      }
     }
     
     // Limit to 4 most relevant badges
@@ -360,17 +420,16 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         'bg-gradient-to-br from-emerald-50 to-emerald-100'
       }`}>
         <div className="max-w-4xl mx-auto px-4 py-8">
-          {/* Display Mode Selector - for testing */}
-          <div className="flex justify-end mb-4">
-            <DisplayModeSelector />
-          </div>
-          
           <div className="flex flex-col items-center">
             <ScoreStatusDisplay 
               score={restaurant.cleanplate_score} 
               latestResult={restaurant.latest_result} 
               size="lg" 
-              showLabel 
+              showLabel
+              violationCount={inspections.length > 0 ? inspections[0].violations?.length ?? 0 : undefined}
+              criticalCount={inspections.length > 0 ? inspections[0].violations?.filter(v => v.is_critical).length ?? 0 : undefined}
+              forceMode="H"
+              latestInspectionResult={inspections.length > 0 ? inspections[0].results : undefined}
             />
             
             {/* Achievement Badges based on inspection history */}
@@ -470,18 +529,19 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
                   </p>
                   {violationThemes.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3">
-                      {violationThemes.map((theme, index) => (
-                        <span
-                          key={index}
-                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            status === 'fail' ? 'bg-red-100 text-red-700' : 
-                            status === 'conditional' ? 'bg-amber-100 text-amber-700' : 
-                            'bg-emerald-100 text-emerald-700'
-                          }`}
-                        >
-                          {theme}
-                        </span>
-                      ))}
+                      {violationThemes.map((theme, index) => {
+                        const themeConfig = getThemeConfig(theme);
+                        const Icon = themeConfig.icon;
+                        return (
+                          <span
+                            key={index}
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-full ${themeConfig.bgColor} ${themeConfig.textColor} flex items-center gap-1`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            {themeConfig.label}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -598,7 +658,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         </div>
         
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-          <Map
+          <MapComponent
             restaurants={[{
               id: restaurant.id,
               slug: restaurant.slug,

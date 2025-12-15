@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Map, MapHandle } from "@/components/Map";
 import { MapSidebar } from "@/components/MapSidebar";
@@ -27,7 +27,7 @@ interface Neighborhood {
   pass_rate?: number;
 }
 
-export default function MapPage() {
+function MapPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const mapRef = useRef<MapHandle>(null);
@@ -330,5 +330,13 @@ export default function MapPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<div className="h-screen flex items-center justify-center">Loading map...</div>}>
+      <MapPageContent />
+    </Suspense>
   );
 }

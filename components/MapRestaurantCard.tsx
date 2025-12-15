@@ -117,7 +117,9 @@ export function MapRestaurantCard({
           <div className="flex items-center justify-between gap-2">
             <ScoreStatusDisplayCompact 
               score={restaurant.cleanplate_score} 
-              latestResult={restaurant.latest_result} 
+              latestResult={restaurant.latest_result}
+              violationCount={restaurant.violation_count}
+              criticalCount={restaurant.critical_count}
             />
             {/* Facility Badge */}
             {(() => {

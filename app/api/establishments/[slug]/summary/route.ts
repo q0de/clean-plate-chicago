@@ -91,6 +91,8 @@ function extractViolationThemesFromText(rawViolations: string | null): string[] 
   return themes.slice(0, 4); // Return top 4 themes
 }
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { slug: string } }
@@ -119,14 +121,13 @@ export async function GET(
       );
     }
 
-    // Fetch the latest inspection directly by ordering (most reliable)
-    // This ensures we always get the most recent data
+    // Fetch recent inspections (last 3) for trend context in AI summary
     const { data: inspections } = await supabase
       .from("inspections")
       .select("id, inspection_type, raw_violations, violation_count, critical_count, inspection_date, results")
       .eq("establishment_id", establishment.id)
       .order("inspection_date", { ascending: false })
-      .limit(1);
+      .limit(3);
 
     const latestInspection = inspections?.[0];
     const violationCount = latestInspection?.violation_count || 0;
@@ -157,7 +158,15 @@ export async function GET(
     const latestResult = latestInspection?.results || establishment.latest_result;
     const latestDate = latestInspection?.inspection_date || establishment.latest_inspection_date;
 
-    // Generate AI summary using the actual latest inspection data
+    // Prepare recent inspection history for AI context
+    const recentInspections = inspections?.map(insp => ({
+      inspection_date: insp.inspection_date,
+      results: insp.results,
+      violation_count: insp.violation_count,
+      critical_count: insp.critical_count,
+    })) || [];
+
+    // Generate AI summary using the actual latest inspection data with history
     const summary = await generateAISummary({
       dba_name: establishment.dba_name,
       facility_type: establishment.facility_type || "Restaurant",
@@ -168,6 +177,7 @@ export async function GET(
       inspection_type: inspectionType,
       raw_violations: rawViolations,
       latest_inspection_date: latestDate || null,
+      recent_inspections: recentInspections.length > 1 ? recentInspections : undefined,
     });
 
     return NextResponse.json({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SearchInput } from "@/components/SearchInput";
 import { RestaurantCard } from "@/components/RestaurantCard";
@@ -23,7 +23,7 @@ interface Restaurant {
   risk_level?: number;
 }
 
-export default function SearchPage() {
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [query, setQuery] = useState(searchParams.get("q") || "");
@@ -257,5 +257,13 @@ export default function SearchPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading search...</div>}>
+      <SearchPageContent />
+    </Suspense>
   );
 }
