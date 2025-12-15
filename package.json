@@ -1,0 +1,41 @@
+{
+  "name": "cleanplate-chicago",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@heroui/react": "^2.0.0",
+    "@supabase/ssr": "^0.1.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^3.0.0",
+    "framer-motion": "^11.9.0",
+    "lucide-react": "^0.344.0",
+    "mapbox-gl": "^3.0.0",
+    "next": "^14.2.0",
+    "openai": "^6.10.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "recharts": "^3.5.1",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/mapbox-gl": "^3.0.0",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.0",
+    "dotenv": "^17.2.3",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.2.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0"
+  }
+}
