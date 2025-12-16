@@ -104,7 +104,12 @@ export function InspectionTimeline({
   hasMore: externalHasMore,
   isLoadingMore = false
 }: InspectionTimelineProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Auto-expand the latest (first) inspection by default
+  const sortedInspections = [...inspections].sort(
+    (a, b) => new Date(b.inspection_date).getTime() - new Date(a.inspection_date).getTime()
+  );
+  const latestInspectionId = sortedInspections.length > 0 ? sortedInspections[0].id : null;
+  const [expandedId, setExpandedId] = useState<string | null>(latestInspectionId);
   const [visibleCount, setVisibleCount] = useState(initialCount);
 
   if (inspections.length === 0) {
@@ -118,10 +123,7 @@ export function InspectionTimeline({
     );
   }
 
-  // Sort by date descending (most recent first)
-  const sortedInspections = [...inspections].sort(
-    (a, b) => new Date(b.inspection_date).getTime() - new Date(a.inspection_date).getTime()
-  );
+  // Already sorted above for latest inspection ID
 
   // Calculate what to show
   const hasMoreToShow = sortedInspections.length > visibleCount || externalHasMore;

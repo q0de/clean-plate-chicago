@@ -46,10 +46,27 @@ function getCleanPlateBadgeColor(score: number): string {
   return "bg-red-500";
 }
 
-// Calculate Latest Inspection Score from violations
-function calculateLatestInspectionScore(violationCount: number, criticalCount: number): number {
+// Calculate Latest Inspection Score from violations and result
+function calculateLatestInspectionScore(
+  violationCount: number, 
+  criticalCount: number,
+  latestResult?: string
+): number {
   const nonCriticalCount = Math.max(0, violationCount - criticalCount);
-  const score = 100 - (criticalCount * 15) - (nonCriticalCount * 5);
+  let score = 100 - (criticalCount * 15) - (nonCriticalCount * 5);
+  
+  // Adjust based on actual inspection result
+  if (latestResult) {
+    const result = latestResult.toLowerCase();
+    if (result.includes("fail")) {
+      // Failed inspections should cap at a lower maximum
+      score = Math.min(score, 50);
+    } else if (result.includes("condition")) {
+      // Conditional passes should cap at 75
+      score = Math.min(score, 75);
+    }
+  }
+  
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
@@ -92,6 +109,13 @@ function getScoreColor(score: number): string {
   if (score >= 70) return scoreColors.good;
   if (score >= 60) return scoreColors.fair;
   return scoreColors.poor;
+}
+
+// Latest Inspection score color - no blue, green for 71+ (passing), yellow for 60-70
+function getLatestInspectionScoreColor(score: number): string {
+  if (score >= 71) return scoreColors.great; // Green for passing scores (71+)
+  if (score >= 60) return scoreColors.good; // Yellow for borderline (60-70)
+  return scoreColors.poor; // Red for failing (<60)
 }
 
 const sizeConfig = {
@@ -413,7 +437,7 @@ function VariantF({
   status: Status; 
   size: "sm" | "md" | "lg" 
 }) {
-  const latestColor = latestInspectionScore !== null ? getScoreColor(latestInspectionScore) : "#9ca3af";
+  const latestColor = latestInspectionScore !== null ? getLatestInspectionScoreColor(latestInspectionScore) : "#9ca3af";
   const cleanplateColor = getScoreColor(cleanplateScore);
   
   if (size === "sm") {
@@ -460,7 +484,7 @@ function VariantG({
   status: Status; 
   size: "sm" | "md" | "lg" 
 }) {
-  const latestColor = latestInspectionScore !== null ? getScoreColor(latestInspectionScore) : "#9ca3af";
+  const latestColor = latestInspectionScore !== null ? getLatestInspectionScoreColor(latestInspectionScore) : "#9ca3af";
   const cleanplateColor = getScoreColor(cleanplateScore);
   
   if (size === "sm") {
@@ -512,7 +536,7 @@ function VariantH({
   size: "sm" | "md" | "lg";
   latestInspectionResult?: string;
 }) {
-  const latestColor = latestInspectionScore !== null ? getScoreColor(latestInspectionScore) : "#9ca3af";
+  const latestColor = latestInspectionScore !== null ? getLatestInspectionScoreColor(latestInspectionScore) : "#9ca3af";
   const cleanplateColor = getScoreColor(cleanplateScore);
   // Use latest inspection result to derive status for the left side, or fall back to overall status
   const latestStatus = latestInspectionResult 
@@ -579,7 +603,7 @@ function VariantI({
   status: Status; 
   size: "sm" | "md" | "lg" 
 }) {
-  const latestColor = latestInspectionScore !== null ? getScoreColor(latestInspectionScore) : "#9ca3af";
+  const latestColor = latestInspectionScore !== null ? getLatestInspectionScoreColor(latestInspectionScore) : "#9ca3af";
   const cleanplateColor = getScoreColor(cleanplateScore);
   
   if (size === "sm") {
@@ -625,7 +649,7 @@ function VariantJ({
   status: Status; 
   size: "sm" | "md" | "lg" 
 }) {
-  const latestColor = latestInspectionScore !== null ? getScoreColor(latestInspectionScore) : "#9ca3af";
+  const latestColor = latestInspectionScore !== null ? getLatestInspectionScoreColor(latestInspectionScore) : "#9ca3af";
   const cleanplateColor = getScoreColor(cleanplateScore);
   
   if (size === "sm") {
@@ -688,7 +712,7 @@ export function ScoreStatusDisplay({
   
   // Calculate latest inspection score if violation data is provided
   const latestInspectionScore = violationCount !== undefined && criticalCount !== undefined
-    ? calculateLatestInspectionScore(violationCount, criticalCount)
+    ? calculateLatestInspectionScore(violationCount, criticalCount, latestResult)
     : null;
   
   const variants: Record<DisplayMode, JSX.Element> = {
@@ -775,7 +799,7 @@ export function ScoreStatusDisplayCompact({
   
   // Calculate latest inspection score if violation data is provided
   const latestInspectionScore = violationCount !== undefined && criticalCount !== undefined
-    ? calculateLatestInspectionScore(violationCount, criticalCount)
+    ? calculateLatestInspectionScore(violationCount, criticalCount, latestResult)
     : null;
   
   // Use forceMode if provided, otherwise use context mode

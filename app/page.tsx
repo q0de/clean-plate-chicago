@@ -156,8 +156,8 @@ export default function Home() {
               <Button
                 color="primary"
                 size="lg"
-                radius="full"
-                className="font-semibold px-8 bg-emerald-600 hover:bg-emerald-700"
+                radius="lg"
+                className="font-semibold px-8 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
                 onPress={handleSearch}
               >
                 Search

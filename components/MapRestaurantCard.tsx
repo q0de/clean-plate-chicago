@@ -99,10 +99,9 @@ export function MapRestaurantCard({
 
   return (
     <div
-      onClick={onClick}
       onMouseEnter={() => onHover?.(restaurant.id)}
       onMouseLeave={() => onHover?.(null)}
-      className={`rounded-xl border-2 cursor-pointer transition-all overflow-hidden ${
+      className={`rounded-xl border-2 transition-all overflow-hidden touch-pan-y ${
         isSelected
           ? `${statusColors[status]} shadow-lg`
           : isHovered
@@ -110,8 +109,11 @@ export function MapRestaurantCard({
           : "border-gray-200 bg-white hover:border-gray-300"
       }`}
     >
-      {/* Main Card Content */}
-      <div className="p-3">
+      {/* Main Card Content - Only clickable when not expanded */}
+      <div 
+        onClick={!isSelected ? onClick : undefined}
+        className={`p-3 ${!isSelected ? 'cursor-pointer' : ''}`}
+      >
         <div className="flex flex-col gap-2">
           {/* Score + Status Display (respects display mode) */}
           <div className="flex items-center justify-between gap-2">
@@ -148,7 +150,14 @@ export function MapRestaurantCard({
 
       {/* Expanded Details - Only when selected */}
       {isSelected && (
-        <div className="border-t border-gray-200 bg-white animate-in slide-in-from-top-2 duration-200">
+        <div 
+          className="border-t border-gray-200 bg-white animate-in slide-in-from-top-2 duration-200"
+          onClick={(e) => e.stopPropagation()}
+          onTouchMove={(e) => {
+            // Allow touch scrolling to work on parent
+            e.stopPropagation();
+          }}
+        >
           {/* Stats Grid */}
           <div className="grid grid-cols-3 gap-2 p-3 bg-gray-50">
             {/* Last Inspected */}

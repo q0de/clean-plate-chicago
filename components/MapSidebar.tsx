@@ -92,10 +92,9 @@ export function MapSidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Scroll to selected or hovered restaurant in list when it changes
+  // Scroll to selected restaurant in list when it changes (only from map marker clicks, not sidebar hover)
   useEffect(() => {
-    const restaurantIdToScroll = selectedRestaurantId || hoveredRestaurantId;
-    if (restaurantIdToScroll && restaurantListRef.current) {
+    if (selectedRestaurantId && restaurantListRef.current) {
       // Longer delay to ensure DOM is updated and expansion animation completes
       setTimeout(() => {
         if (selectedCardRef.current) {
@@ -106,7 +105,7 @@ export function MapSidebar({
         }
       }, 300);
     }
-  }, [selectedRestaurantId, hoveredRestaurantId]);
+  }, [selectedRestaurantId]);
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: "score", label: "Highest Score" },
@@ -397,7 +396,7 @@ export function MapSidebar({
       </div>
 
       {/* Restaurant List */}
-      <div ref={restaurantListRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={restaurantListRef} className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
         {isLoading ? (
           // Loading skeletons
           [...Array(5)].map((_, i) => (
@@ -424,11 +423,11 @@ export function MapSidebar({
           filteredRestaurants.map((restaurant) => {
             const isSelected = selectedRestaurantId === restaurant.id;
             const isHovered = hoveredRestaurantId === restaurant.id;
-            const shouldScroll = isSelected || isHovered;
+            // Only set ref for selected (from map), not hovered (from sidebar)
             return (
               <div
                 key={restaurant.id}
-                ref={shouldScroll ? selectedCardRef : null}
+                ref={isSelected ? selectedCardRef : null}
               >
                 <MapRestaurantCard
                   restaurant={restaurant}
