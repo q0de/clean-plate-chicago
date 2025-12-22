@@ -34,3 +34,7 @@ curl -X POST https://your-project.supabase.co/functions/v1/sync-inspections \
 
 
 
+
+
+
+

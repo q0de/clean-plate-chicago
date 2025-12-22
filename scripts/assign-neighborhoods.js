@@ -224,3 +224,7 @@ async function assignNeighborhoods() {
 
 assignNeighborhoods().catch(console.error);
 
+
+
+
+

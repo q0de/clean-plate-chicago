@@ -11,28 +11,90 @@ export async function GET(request: NextRequest) {
 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
+    const cutoffDateStr = cutoffDate.toISOString().split("T")[0];
 
-    // Get establishments that failed in the last N days
-    const { data, error } = await supabase
-      .from("establishments")
-      .select("*")
-      .ilike("latest_result", "%fail%")
-      .gte("latest_inspection_date", cutoffDate.toISOString().split("T")[0])
-      .order("latest_inspection_date", { ascending: false })
-      .limit(limit);
+    // Query inspections table directly to get the most recent inspections (active statuses only)
+    // This ensures we're always getting current data, not relying on potentially stale establishment fields
+    // Show mix of pass, conditional, and fail for "Trending" section
+    // Exclude "Out of Business" - closed restaurants shouldn't appear in trending
+    const { data: inspections, error: inspError } = await supabase
+      .from("inspections")
+      .select("id, inspection_date, results, establishment_id, raw_violations")
+      .in("results", ["Pass", "Pass w/ Conditions", "Fail"])
+      .gte("inspection_date", cutoffDateStr)
+      .order("inspection_date", { ascending: false })
+      .limit(limit * 3); // Get more to account for duplicates
 
-    if (error) {
-      console.error("Recent failures query error:", error);
+    if (inspError) {
+      console.error("Recent failures query error:", inspError);
       return NextResponse.json(
         { error: "Failed to fetch recent failures" },
         { status: 500 }
       );
     }
 
+    if (!inspections || inspections.length === 0) {
+      return NextResponse.json({
+        data: [],
+        meta: {
+          total: 0,
+          limit,
+        },
+      });
+    }
+
+    // Filter to get only the most recent inspection per establishment
+    const seenEstablishments = new Set<string>();
+    const uniqueInspectionMap = new Map<string, typeof inspections[0]>();
+
+    for (const inspection of inspections) {
+      const estId = inspection.establishment_id;
+      if (!uniqueInspectionMap.has(estId)) {
+        uniqueInspectionMap.set(estId, inspection);
+        if (uniqueInspectionMap.size >= limit) {
+          break;
+        }
+      }
+    }
+
+    // Get establishment IDs
+    const establishmentIds = Array.from(uniqueInspectionMap.keys());
+
+    // Fetch establishments
+    const { data: establishments, error: estError } = await supabase
+      .from("establishments")
+      .select("*")
+      .in("id", establishmentIds);
+
+    if (estError) {
+      console.error("Establishments query error:", estError);
+      return NextResponse.json(
+        { error: "Failed to fetch establishments" },
+        { status: 500 }
+      );
+    }
+
+    // Merge inspection data with establishment data, maintaining order by inspection date
+    const uniqueInspections = establishments
+      ?.map((est) => {
+        const inspection = uniqueInspectionMap.get(est.id);
+        return {
+          ...est,
+          latest_result: inspection?.results || est.latest_result,
+          latest_inspection_date: inspection?.inspection_date || est.latest_inspection_date,
+          raw_violations: inspection?.raw_violations || null,
+        };
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.latest_inspection_date || 0).getTime();
+        const dateB = new Date(b.latest_inspection_date || 0).getTime();
+        return dateB - dateA; // Most recent first
+      }) || [];
+
     return NextResponse.json({
-      data: data || [],
+      data: uniqueInspections,
       meta: {
-        total: data?.length || 0,
+        total: uniqueInspections.length,
         limit,
       },
     });

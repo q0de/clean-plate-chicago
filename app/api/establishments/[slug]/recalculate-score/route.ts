@@ -207,3 +207,7 @@ function getDaysSinceInspection(date: string): number {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
+
+
+
+

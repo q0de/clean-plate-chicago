@@ -7,7 +7,7 @@ import { ScoreTrendChart } from "@/components/ScoreTrendChart";
 import { InspectionTimeline, TimelineInspection } from "@/components/InspectionTimeline";
 import { Map as MapComponent } from "@/components/Map";
 import { BottomNav } from "@/components/BottomNav";
-import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle, AlertCircle, Wrench, Utensils, FileText, Hand } from "lucide-react";
+import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle, AlertCircle, Wrench, Utensils, FileText, Hand, Phone } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Restaurant {
@@ -43,8 +43,8 @@ function getThemeConfig(theme: string): {
   bgColor: string;
   textColor: string;
 } {
-  // Remove emoji from theme string
-  const label = theme.replace(/^[\u{1F300}-\u{1F9FF}]+\s*/u, '').trim();
+  // Remove emoji from theme string (covers common emoji ranges including ⚠️, 🐭, 🌡️, etc.)
+  const label = theme.replace(/^[\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}]+\s*/gu, '').trim();
   const lowerTheme = theme.toLowerCase();
   
   // Temperature control
@@ -109,6 +109,15 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
   const [violationThemes, setViolationThemes] = useState<string[]>([]);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   
+  // External business data (Yelp/Google)
+  const [externalData, setExternalData] = useState<{
+    imageUrl: string | null;
+    phone: string | null;
+    isOpenNow: boolean | null;
+    yelpUrl: string | null;
+  }>({ imageUrl: null, phone: null, isOpenNow: null, yelpUrl: null });
+  const [isLoadingExternalData, setIsLoadingExternalData] = useState(true);
+  
   // Badge computation based on inspection history
   interface Badge {
     icon: React.ReactNode;
@@ -117,7 +126,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
     bgColor: string;
   }
   
-  const computeBadges = (inspectionList: TimelineInspection[], currentStatus: "pass" | "conditional" | "fail"): Badge[] => {
+  const computeBadges = (inspectionList: TimelineInspection[], currentStatus: "pass" | "conditional" | "fail" | "closed"): Badge[] => {
     if (inspectionList.length === 0) return [];
     
     const badges: Badge[] = [];
@@ -298,12 +307,18 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
     return badges.slice(0, 4);
   };
   
+  // Check if restaurant is out of business
+  const isOutOfBusiness = restaurant.latest_result.toLowerCase().includes("out of business") ||
+    restaurant.latest_result.toLowerCase().includes("business not located");
+  
   // Determine status based on score thresholds (needed for badge computation)
   // Determine status based on inspection result first, then score
-  const getStatus = (): "pass" | "conditional" | "fail" => {
+  const getStatus = (): "pass" | "conditional" | "fail" | "closed" => {
     const score = restaurant.cleanplate_score;
     const result = restaurant.latest_result.toLowerCase();
     
+    // Out of business / closed
+    if (result.includes("out of business") || result.includes("business not located")) return "closed";
     // Explicit fail always shows as fail
     if (result.includes("fail")) return "fail";
     // Conditional pass shows as conditional
@@ -341,6 +356,32 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
       })
       .catch(() => setIsLoadingSummary(false));
   }, [restaurant.slug]);
+
+  // Fetch external business data (Yelp/Google)
+  useEffect(() => {
+    const fetchExternalData = async () => {
+      try {
+        const params = new URLSearchParams({
+          name: restaurant.dba_name,
+          address: restaurant.address,
+          extended: "true",
+        });
+        const res = await fetch(`/api/restaurant-image?${params}`);
+        const data = await res.json();
+        setExternalData({
+          imageUrl: data.imageUrl || null,
+          phone: data.phone || null,
+          isOpenNow: data.isOpenNow ?? null,
+          yelpUrl: data.yelpUrl || null,
+        });
+      } catch (error) {
+        console.error("Failed to fetch external data:", error);
+      } finally {
+        setIsLoadingExternalData(false);
+      }
+    };
+    fetchExternalData();
+  }, [restaurant.dba_name, restaurant.address]);
 
   // Load more handler - lazy loads additional inspections
   const handleLoadMore = async (): Promise<TimelineInspection[]> => {
@@ -389,146 +430,134 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
     window.open(url, "_blank");
   };
 
+  // Status label for display
+  const statusLabel = status === 'pass' ? 'Passing' : 
+    status === 'conditional' ? 'Conditional' : 
+    status === 'closed' ? 'Permanently Closed' : 'Failed';
+  const statusBadgeColor = status === 'pass' ? 'bg-emerald-500/20 text-emerald-700' : 
+    status === 'conditional' ? 'bg-amber-500/20 text-amber-700' : 
+    status === 'closed' ? 'bg-gray-500/20 text-gray-700' : 'bg-red-500/20 text-red-700';
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => router.back()}
-              className="flex items-center gap-1 text-gray-600 hover:text-emerald-600 transition-colors font-medium"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              Back
-            </button>
-            <button
-              onClick={handleShare}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              aria-label="Share"
-            >
-              <Share2 className="w-5 h-5 text-gray-600" />
-            </button>
-          </div>
+    <div className="min-h-screen bg-[#f6f8f6] pb-24">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-gray-500 hover:text-emerald-600 transition-colors group"
+        >
+          <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+          <span className="font-bold text-sm">Back to Search</span>
+        </button>
+        <div className="hidden sm:flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-emerald-500" />
+          <span className="font-bold text-lg tracking-tight">CleanPlate Chicago</span>
         </div>
+        <button
+          onClick={handleShare}
+          className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+          aria-label="Share"
+        >
+          <Share2 className="w-5 h-5 text-gray-600" />
+        </button>
       </header>
 
-      {/* Score Hero Section */}
-      <section className={`${
-        status === 'fail' ? 'bg-gradient-to-br from-red-50 to-red-100' : 
-        status === 'conditional' ? 'bg-gradient-to-br from-amber-50 to-amber-100' : 
-        'bg-gradient-to-br from-emerald-50 to-emerald-100'
-      }`}>
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="flex flex-col items-center">
-            <ScoreStatusDisplay 
-              score={restaurant.cleanplate_score} 
-              latestResult={restaurant.latest_result} 
-              size="lg" 
-              showLabel
-              violationCount={inspections.length > 0 ? inspections[0].violations?.length ?? 0 : undefined}
-              criticalCount={inspections.length > 0 ? inspections[0].violations?.filter(v => v.is_critical).length ?? 0 : undefined}
-              forceMode="H"
-              latestInspectionResult={inspections.length > 0 ? inspections[0].results : undefined}
-            />
-            
-            {/* Achievement Badges based on inspection history */}
-            {badges.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-2 mt-4">
-                {badges.map((badge, index) => (
-                  <div
-                    key={index}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${badge.bgColor} ${badge.color} shadow-sm`}
-                  >
-                    {badge.icon}
-                    {badge.label}
-                  </div>
-                ))}
+      {/* Main Content - Two Column Layout */}
+      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 gap-8 grid grid-cols-1 lg:grid-cols-12">
+        
+        {/* Left Column: Main Content */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          
+          {/* Score Hero Section */}
+          <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200">
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
+              {/* Score Circle */}
+              <div className="relative w-32 h-32 flex-shrink-0">
+                <svg className="w-full h-full" viewBox="0 0 100 100">
+                  <circle 
+                    className="fill-none stroke-gray-100" 
+                    cx="50" cy="50" r="45" 
+                    strokeWidth="8"
+                  />
+                  <circle 
+                    className={`fill-none ${
+                      status === 'fail' ? 'stroke-red-500' : 
+                      status === 'conditional' ? 'stroke-amber-500' : 
+                      status === 'closed' ? 'stroke-gray-400' :
+                      'stroke-emerald-500'
+                    }`}
+                    cx="50" cy="50" r="45" 
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray="283"
+                    strokeDashoffset={283 - (restaurant.cleanplate_score / 100) * 283}
+                    style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-black tracking-tighter">{restaurant.cleanplate_score}</span>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Score</span>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </section>
 
-      {/* Restaurant Info Card */}
-      <div className="max-w-4xl mx-auto px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{restaurant.dba_name}</h1>
-          {restaurant.aka_name && (
-            <p className="text-gray-500 text-sm mb-3">Also known as: {restaurant.aka_name}</p>
-          )}
-          
-          {/* Address */}
-          <div className="flex items-start gap-3 mb-4">
-            <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-gray-700">
-                {restaurant.address}
-                {restaurant.zip && `, ${restaurant.zip}`}
-              </p>
-              {restaurant.neighborhood && (
-                <button 
-                  onClick={() => router.push(`/neighborhood/${restaurant.neighborhood!.slug}`)}
-                  className="text-emerald-600 hover:text-emerald-700 font-medium text-sm"
-                >
-                  {restaurant.neighborhood.name} →
-                </button>
-              )}
-            </div>
-          </div>
-          
-          <button
-            onClick={handleGetDirections}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors"
-          >
-            <MapPin className="w-5 h-5" />
-            Get Directions
-            <ExternalLink className="w-4 h-4" />
-          </button>
-        </div>
+              {/* Status & Badges */}
+              <div className="flex flex-col gap-4 text-center sm:text-left flex-grow">
+                <div>
+                  <div className="flex items-center justify-center sm:justify-start gap-3 mb-1">
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{statusLabel}</h1>
+                    <span className={`${statusBadgeColor} px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide`}>
+                      {isOutOfBusiness ? 'Out of Business' : 'Active License'}
+                    </span>
+                  </div>
+                  <p className="text-gray-500 text-sm sm:text-base">
+                    {status === 'closed' ? 'This establishment is no longer in operation.' :
+                     status === 'pass' ? 'Excellent compliance history.' : 
+                     status === 'conditional' ? 'Some concerns noted.' : 
+                     'Failed inspection.'} Last inspected {formatDistanceToNow(new Date(restaurant.latest_inspection_date), { addSuffix: true })}.
+                  </p>
+                </div>
 
-        {/* AI Summary Card */}
-        <div className={`mt-4 rounded-2xl p-5 shadow-sm border ${
-          status === 'fail' ? 'bg-red-50 border-red-200' : 
-          status === 'conditional' ? 'bg-amber-50 border-amber-200' : 
-          'bg-emerald-50 border-emerald-200'
-        }`}>
-          <div className="flex items-start gap-3">
-            <div className={`p-2 rounded-lg ${
-              status === 'fail' ? 'bg-red-100' : 
-              status === 'conditional' ? 'bg-amber-100' : 
-              'bg-emerald-100'
-            }`}>
-              <Sparkles className={`w-5 h-5 ${
-                status === 'fail' ? 'text-red-600' : 
-                status === 'conditional' ? 'text-amber-600' : 
-                'text-emerald-600'
-              }`} />
+                {/* Badges Grid */}
+                {badges.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full">
+                    {badges.slice(0, 3).map((badge, index) => (
+                      <div key={index} className={`flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100`}>
+                        <div className={`${badge.bgColor} p-1.5 rounded-md ${badge.color}`}>
+                          {badge.icon}
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-bold">{badge.label}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex-1">
-              <h3 className={`font-semibold text-sm mb-1 ${
-                status === 'fail' ? 'text-red-900' : 
-                status === 'conditional' ? 'text-amber-900' : 
-                'text-emerald-900'
-              }`}>
-                AI Inspection Summary
-              </h3>
+          </section>
+
+          {/* AI Summary Card - Dark Theme */}
+          <section className="relative overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800 rounded-xl p-6 sm:p-8 shadow-md text-white">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Sparkles className="w-24 h-24" />
+            </div>
+            <div className="relative z-10 flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Sparkles className="w-5 h-5" />
+                <h2 className="text-sm font-bold uppercase tracking-widest">AI Inspection Summary</h2>
+              </div>
               {isLoadingSummary ? (
                 <div className="space-y-2">
-                  <div className="h-4 bg-gray-200/50 rounded animate-pulse w-full" />
-                  <div className="h-4 bg-gray-200/50 rounded animate-pulse w-3/4" />
+                  <div className="h-4 bg-white/10 rounded animate-pulse w-full" />
+                  <div className="h-4 bg-white/10 rounded animate-pulse w-3/4" />
                 </div>
               ) : aiSummary ? (
                 <>
-                  <p className={`text-sm leading-relaxed ${
-                    status === 'fail' ? 'text-red-800' : 
-                    status === 'conditional' ? 'text-amber-800' : 
-                    'text-emerald-800'
-                  }`}>
+                  <p className="text-lg font-medium leading-relaxed max-w-2xl text-gray-100">
                     {aiSummary}
                   </p>
                   {violationThemes.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-3">
+                    <div className="flex flex-wrap gap-2 mt-2">
                       {violationThemes.map((theme, index) => {
                         const themeConfig = getThemeConfig(theme);
                         const Icon = themeConfig.icon;
@@ -546,135 +575,217 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
                   )}
                 </>
               ) : (
-                <p className="text-sm text-gray-500 italic">Summary unavailable</p>
+                <p className="text-gray-400 italic">Summary unavailable</p>
               )}
             </div>
-          </div>
-        </div>
-      </div>
+          </section>
 
-      {/* Details Grid */}
-      <div className="max-w-4xl mx-auto px-4 mt-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Last Inspected */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Last Inspected</span>
+          {/* Score History Chart */}
+          <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold">Score History</h3>
+              <span className="text-sm text-gray-500">Last 12 Months</span>
             </div>
-            <p className="font-semibold text-gray-900">
-              {new Date(restaurant.latest_inspection_date).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </p>
-            <p className="text-sm text-gray-500">
-              {formatDistanceToNow(new Date(restaurant.latest_inspection_date), { addSuffix: true })}
-            </p>
-          </div>
+            {isLoadingInspections ? (
+              <div className="h-64 bg-gray-50 rounded-xl animate-pulse" />
+            ) : (
+              <ScoreTrendChart inspections={inspections} />
+            )}
+          </section>
+
+          {/* Inspection Timeline */}
+          <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200">
+            <h3 className="text-lg font-bold mb-6">Inspection Timeline</h3>
+            {isLoadingInspections ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 bg-gray-50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <InspectionTimeline 
+                inspections={inspections}
+                initialCount={3}
+                loadMoreCount={LOAD_MORE_COUNT}
+                onLoadMore={handleLoadMore}
+                hasMore={hasMore}
+                isLoadingMore={isLoadingMore}
+              />
+            )}
+          </section>
+        </div>
+
+        {/* Right Column: Sidebar */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
           
-          {/* Inspection Category */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Inspection Category</span>
+          {/* Restaurant Info Card */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* Restaurant Image */}
+            <div className="h-40 bg-gradient-to-br from-gray-200 to-gray-300 relative overflow-hidden">
+              {isLoadingExternalData ? (
+                <div className="absolute inset-0 animate-pulse bg-gray-200" />
+              ) : externalData.imageUrl ? (
+                <img 
+                  src={externalData.imageUrl} 
+                  alt={restaurant.dba_name}
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              {/* Status Badge - prioritize official "Out of Business" over Yelp hours */}
+              <div className="absolute bottom-4 left-4">
+                {isOutOfBusiness ? (
+                  <span className="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">
+                    Permanently Closed
+                  </span>
+                ) : externalData.isOpenNow !== null ? (
+                  <span className={`${
+                    externalData.isOpenNow 
+                      ? 'bg-emerald-500 text-white' 
+                      : 'bg-gray-700 text-gray-200'
+                  } text-xs font-bold px-2 py-1 rounded`}>
+                    {externalData.isOpenNow ? 'Open Now' : 'Closed'}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <p className="font-semibold inline-flex px-2 py-1 rounded-lg text-sm bg-gray-100 text-gray-700">
-              Level {restaurant.risk_level}
-            </p>
-          </div>
-          
-          {/* Facility Type */}
-          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-2 mb-2">
-              <Building2 className="w-4 h-4 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Facility Type</span>
+            <div className="p-6">
+              <h2 className="text-2xl font-black tracking-tight mb-1">{restaurant.dba_name}</h2>
+              {restaurant.aka_name && (
+                <p className="text-gray-500 text-sm mb-4">Also known as: {restaurant.aka_name}</p>
+              )}
+              <div className="flex flex-col gap-3 mb-6">
+                <div className="flex items-start gap-3">
+                  <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">{restaurant.address}</p>
+                    <p className="text-gray-500 text-sm">{restaurant.city}, {restaurant.state} {restaurant.zip}</p>
+                  </div>
+                </div>
+                {restaurant.neighborhood && (
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-5 h-5 text-gray-400" />
+                    <button 
+                      onClick={() => router.push(`/neighborhood/${restaurant.neighborhood!.slug}`)}
+                      className="text-sm font-bold text-emerald-600 hover:underline"
+                    >
+                      {restaurant.neighborhood.name}
+                    </button>
+                  </div>
+                )}
+                {/* Phone Number from Yelp */}
+                {externalData.phone && (
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-gray-400" />
+                    <a 
+                      href={`tel:${externalData.phone.replace(/[^0-9+]/g, '')}`}
+                      className="text-sm text-gray-600 hover:text-emerald-600"
+                    >
+                      {externalData.phone}
+                    </a>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleGetDirections}
+                className={`w-full font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                  isOutOfBusiness 
+                    ? 'bg-gray-400 hover:bg-gray-500 text-white' 
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                }`}
+              >
+                <MapPin className="w-5 h-5" />
+                {isOutOfBusiness ? 'View Former Location' : 'Get Directions'}
+              </button>
             </div>
-            <p className="font-semibold text-gray-900">{restaurant.facility_type}</p>
           </div>
-        </div>
-      </div>
 
-      {/* Score Trend Chart */}
-      <section className="max-w-4xl mx-auto px-4 mt-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-emerald-100 rounded-lg">
-            <TrendingUp className="w-5 h-5 text-emerald-600" />
+          {/* Facility Details Card */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+            <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">Facility Details</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-medium">Last Inspected</p>
+                    <p className="font-bold">
+                      {new Date(restaurant.latest_inspection_date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    restaurant.risk_level === 1 ? 'bg-red-50 text-red-600' :
+                    restaurant.risk_level === 2 ? 'bg-amber-50 text-amber-600' :
+                    'bg-emerald-50 text-emerald-600'
+                  }`}>
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-medium">Risk Category</p>
+                    <p className="font-bold">Risk {restaurant.risk_level} ({riskLabels[restaurant.risk_level as keyof typeof riskLabels] || 'Unknown'})</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-50 p-2 rounded-lg text-purple-600">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-medium">Facility Type</p>
+                    <p className="font-bold">{restaurant.facility_type}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Score History</h2>
-            <p className="text-sm text-gray-500">Track performance over time</p>
-          </div>
-        </div>
-        
-        {isLoadingInspections ? (
-          <div className="h-64 bg-white rounded-xl animate-pulse border border-gray-100" />
-        ) : (
-          <ScoreTrendChart inspections={inspections} />
-        )}
-      </section>
 
-      {/* Inspection Timeline */}
-      <section className="max-w-4xl mx-auto px-4 mt-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <History className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Inspection Timeline</h2>
-            <p className="text-sm text-gray-500">Complete inspection history with violations</p>
+          {/* Map Widget */}
+          <div className="rounded-xl overflow-hidden shadow-sm border border-gray-200 bg-gray-100 relative h-64 group">
+            <MapComponent
+              restaurants={[{
+                id: restaurant.id,
+                slug: restaurant.slug,
+                dba_name: restaurant.dba_name,
+                address: restaurant.address,
+                cleanplate_score: restaurant.cleanplate_score,
+                latest_result: restaurant.latest_result,
+                latitude: restaurant.latitude,
+                longitude: restaurant.longitude,
+              }]}
+              center={[restaurant.longitude, restaurant.latitude]}
+              zoom={15}
+              className="w-full h-full grayscale opacity-80 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent pointer-events-none" />
+            <div className="absolute bottom-4 left-4 right-4">
+              <button 
+                onClick={() => router.push(`/map?lat=${restaurant.latitude}&lng=${restaurant.longitude}`)}
+                className="w-full bg-white text-gray-900 text-sm font-bold py-2 rounded-lg shadow-md hover:bg-gray-50 transition-colors"
+              >
+                View Interactive Map
+              </button>
+            </div>
           </div>
         </div>
-        
-        {isLoadingInspections ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 bg-white rounded-xl animate-pulse border border-gray-100" />
-            ))}
-          </div>
-        ) : (
-          <InspectionTimeline 
-            inspections={inspections}
-            initialCount={3}
-            loadMoreCount={LOAD_MORE_COUNT}
-            onLoadMore={handleLoadMore}
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-          />
-        )}
-      </section>
+      </main>
 
-      {/* Location Map */}
-      <section className="max-w-4xl mx-auto px-4 mt-8 mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-pink-100 rounded-lg">
-            <span className="text-lg">📍</span>
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Location</h2>
-            <p className="text-sm text-gray-500">View on map</p>
-          </div>
+      {/* Footer */}
+      <footer className="border-t border-gray-200 py-8 bg-white mt-8">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <p className="text-gray-400 text-sm">Data provided by City of Chicago Data Portal. Updated daily.</p>
         </div>
-        
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-          <MapComponent
-            restaurants={[{
-              id: restaurant.id,
-              slug: restaurant.slug,
-              dba_name: restaurant.dba_name,
-              address: restaurant.address,
-              cleanplate_score: restaurant.cleanplate_score,
-              latest_result: restaurant.latest_result,
-              latitude: restaurant.latitude,
-              longitude: restaurant.longitude,
-            }]}
-            center={[restaurant.longitude, restaurant.latitude]}
-            zoom={15}
-            className="w-full h-72"
-          />
-        </div>
-      </section>
+      </footer>
 
       <BottomNav />
     </div>

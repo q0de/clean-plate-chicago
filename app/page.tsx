@@ -3,8 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RestaurantCard } from "@/components/RestaurantCard";
+import { useCardDesign } from "@/lib/card-design-context";
+import { NoiseTexture } from "@/components/NoiseTexture";
 import { RestaurantCardSkeleton } from "@/components/RestaurantCardSkeleton";
 import { BottomNav } from "@/components/BottomNav";
+import { CardDesignControls } from "@/components/CardDesignControls";
 import { 
   UtensilsCrossed, 
   ShoppingBag, 
@@ -15,7 +18,9 @@ import {
   Search,
   MapPin,
   AlertTriangle,
-  TrendingUp
+  TrendingUp,
+  Pizza,
+  Fish
 } from "lucide-react";
 import { Button, Card, CardBody, Chip } from "@heroui/react";
 
@@ -28,7 +33,10 @@ interface Restaurant {
   latest_result: string;
   latest_inspection_date: string;
   violation_count?: number;
+  critical_count?: number;
   risk_level?: number;
+  raw_violations?: string;
+  violation_themes?: string[];
 }
 
 interface Neighborhood {
@@ -49,6 +57,7 @@ const categories = [
 
 export default function Home() {
   const router = useRouter();
+  const { config } = useCardDesign();
   const [searchQuery, setSearchQuery] = useState("");
   const [recentFailures, setRecentFailures] = useState<Restaurant[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
@@ -100,120 +109,208 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">🍽️</span>
-              <h1 className="text-2xl font-bold text-emerald-700">CleanPlate</h1>
-            </div>
-            <a
-              href="/about"
-              className="text-sm font-medium text-gray-600 hover:text-emerald-600 transition-colors"
-            >
-              About
-            </a>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#F6F8F6] pb-20">
+      {/* Logo at top of page */}
+      <div 
+        className="flex justify-center bg-[#F6F8F6]"
+        style={{ paddingTop: `${config.headerPadding || 16}px`, paddingBottom: `${config.headerPadding || 16}px` }}
+      >
+        <img 
+          src="/images/logo_5.webp" 
+          alt="CleanPlate Chicago" 
+          style={{ height: `${config.logoIconSize}px`, width: 'auto' }}
+        />
+      </div>
 
-      {/* Hero Section with Gradient */}
-      <section className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white">
-        <div className="max-w-6xl mx-auto px-4 py-12">
-          <div className="text-center mb-8">
-            <h2 className="text-4xl font-bold mb-3">
-              Is your restaurant clean?
-            </h2>
-            <p className="text-emerald-100 text-lg">
-              Search health inspection scores for Chicago restaurants
+      {/* Hero Section */}
+      <section className="px-4 sm:px-8 lg:px-12 pb-8">
+        <div className="max-w-7xl mx-auto relative rounded-2xl overflow-hidden">
+          {/* Background Image with subtle panning */}
+          <div 
+            className="absolute inset-0 bg-center bg-no-repeat bg-cover animate-hero-pan"
+            style={{ backgroundImage: "url('/images/img_header.webp')" }}
+          />
+          {/* Dark Overlay for text readability */}
+          <div className="absolute inset-0 bg-black/40" />
+          
+          {/* Animated Noise Overlay */}
+          {config.heroNoiseEnabled && (
+            <NoiseTexture 
+              opacity={config.heroNoiseOpacity / 100}
+              speed={Math.round(1 / config.heroNoiseSpeed * 30)}
+              contrast={2.5}
+              brightness={1.5}
+            />
+          )}
+          
+          {/* Watermark Logo - bottom right, cropped by edge */}
+          <div 
+            className="absolute bottom-0 right-0 translate-x-1/4 translate-y-1/4 pointer-events-none"
+            style={{ opacity: config.heroWatermarkOpacity || 0.12 }}
+          >
+            <img 
+              src="/images/logo_5.webp" 
+              alt="" 
+              style={{ width: `${config.heroWatermarkSize || 400}px`, height: 'auto' }}
+            />
+          </div>
+          
+          <div className="relative z-10 py-10 px-8 sm:px-12">
+          {/* Live Updates Badge */}
+          <div className="flex justify-center mb-6">
+            <div className="bg-[rgba(19,236,91,0.2)] border border-[rgba(19,236,91,0.4)] flex gap-2 items-center px-[13px] py-[5px] rounded-full backdrop-blur-sm">
+              <div className="bg-[#13EC5B] rounded-full w-2 h-2" />
+              <span className="font-bold text-white text-xs leading-4 tracking-[0.6px] uppercase whitespace-nowrap" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                Live Updates
+              </span>
+            </div>
+          </div>
+
+          {/* Main Heading */}
+          <div className="text-center mb-6">
+            <h1 className="text-4xl sm:text-5xl lg:text-[59.8px] font-extrabold leading-tight sm:leading-[60px] tracking-[-1.5px] text-white mb-0" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+              Eat Safe in{" "}
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#13EC5B] to-[#34d399]">
+                Chicago
+              </span>
+            </h1>
+          </div>
+
+          {/* Subtitle */}
+          <div className="text-center max-w-[672px] mx-auto mb-8">
+            <p className="text-base sm:text-lg lg:text-[20px] leading-6 sm:leading-7 text-white/90 mb-0" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+              Real-time health inspection scores for over 15,000 local restaurants.
+            </p>
+            <p className="text-base sm:text-lg lg:text-[20px] leading-6 sm:leading-7 text-white/90 mb-0" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+              Make informed decisions before you make a reservation.
             </p>
           </div>
 
           {/* Search Box */}
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-2xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
-                <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
+          <div className="max-w-[672px] mx-auto mb-10">
+            <div className="bg-white rounded-xl shadow-[0px_20px_25px_-5px_rgba(0,0,0,0.1),0px_8px_10px_-6px_rgba(0,0,0,0.1)] p-2 flex flex-col sm:flex-row gap-2 items-center">
+              <div className="flex-1 flex items-center gap-3 px-4 py-3">
+                <Search className="w-5 h-5 text-[#9CA3AF] flex-shrink-0" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="Search restaurants, neighborhoods..."
-                  className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400"
+                  placeholder="Search by restaurant, cuisine, or neighborhood..."
+                  className="flex-1 bg-transparent outline-none focus:outline-none focus:ring-0 text-[#0D1B12] placeholder-[#9CA3AF] text-lg"
+                  style={{ fontFamily: 'var(--font-manrope), sans-serif' }}
                 />
                 <button
                   onClick={handleLocationClick}
                   disabled={isLoadingLocation}
-                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none"
                   title="Use my location"
                 >
-                  <MapPin className={`w-5 h-5 ${isLoadingLocation ? 'text-emerald-500 animate-pulse' : 'text-gray-400'}`} />
+                  <MapPin className={`w-5 h-5 ${isLoadingLocation ? 'text-[#13EC5B] animate-pulse' : 'text-[#9CA3AF]'}`} />
                 </button>
               </div>
               <Button
-                color="primary"
-                size="lg"
-                radius="lg"
-                className="font-semibold px-8 bg-emerald-600 hover:bg-emerald-700 rounded-xl"
+                className="bg-[#13EC5B] hover:bg-[#10d955] text-[#0D1B12] font-bold px-10 py-3 h-auto rounded-lg transition-colors min-w-[120px] focus:outline-none"
+                style={{ fontFamily: 'var(--font-manrope), sans-serif' }}
                 onPress={handleSearch}
               >
-                Search
+                Find
               </Button>
             </div>
+          </div>
+
+          {/* Stats Section */}
+          <div className="flex gap-8 sm:gap-12 lg:gap-16 items-start justify-center flex-wrap">
+            <div className="flex flex-col items-center">
+              <div className="text-2xl sm:text-3xl lg:text-[30px] font-extrabold leading-7 sm:leading-8 lg:leading-9 text-white mb-1" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                15k+
+              </div>
+              <div className="text-xs sm:text-sm font-medium leading-4 sm:leading-5 text-white/70" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                Restaurants
+              </div>
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl sm:text-3xl lg:text-[30px] font-extrabold leading-7 sm:leading-8 lg:leading-9 text-white mb-1" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                24h
+              </div>
+              <div className="text-xs sm:text-sm font-medium leading-4 sm:leading-5 text-white/70" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                Updated Daily
+              </div>
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl sm:text-3xl lg:text-[30px] font-extrabold leading-7 sm:leading-8 lg:leading-9 text-white mb-1" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                100%
+              </div>
+              <div className="text-xs sm:text-sm font-medium leading-4 sm:leading-5 text-white/70" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                Official Data
+              </div>
+            </div>
+          </div>
           </div>
         </div>
       </section>
 
-      {/* Category Pills */}
-      <section className="max-w-6xl mx-auto px-4 -mt-6 relative z-10">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {categories.map((category) => (
+      {/* Category Chips Navigation - After Stats, Before Trending */}
+      <nav style={{ backgroundColor: config.chipsSectionBgColor }}>
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-3 items-center justify-center overflow-x-auto py-[17px] scrollbar-hide">
+            {[
+              { label: "Burgers", icon: UtensilsCrossed },
+              { label: "Pizza", icon: Pizza },
+              { label: "Tacos", icon: UtensilsCrossed },
+              { label: "Coffee", icon: Coffee },
+              { label: "Fine Dining", icon: UtensilsCrossed },
+              { label: "Sushi", icon: Fish },
+            ].map((category) => (
               <button
                 key={category.label}
-                onClick={() => router.push(category.href)}
-                className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${category.color}`}
+                onClick={() => router.push(`/search?q=${encodeURIComponent(category.label)}`)}
+                className="border border-transparent flex gap-2 items-center px-[17px] py-[7px] rounded-full shrink-0 hover:opacity-80 transition-all"
+                style={{ backgroundColor: config.chipsBgColor }}
               >
-                <span className="text-2xl">{category.emoji}</span>
-                <span className="text-sm font-medium text-gray-700">{category.label}</span>
+                <category.icon className="w-5 h-5 text-[#0D1B12]" />
+                <span className="font-bold text-[#0D1B12] text-sm leading-5 whitespace-nowrap" style={{ fontFamily: 'var(--font-manrope), sans-serif' }}>
+                  {category.label}
+                </span>
               </button>
             ))}
           </div>
         </div>
-      </section>
+      </nav>
 
-      {/* Recently Failed Section */}
+      {/* Trending Section */}
       <section className="max-w-6xl mx-auto px-4 mt-10">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-red-100 rounded-lg">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+          <div className="p-2 bg-emerald-100 rounded-lg">
+            <TrendingUp className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-gray-900">Recently Failed</h3>
-            <p className="text-sm text-gray-500">Restaurants that failed their latest inspection</p>
+            <h3 className="text-xl font-bold text-gray-900">Trending</h3>
+            <p className="text-sm text-gray-500">Most recent inspections across Chicago</p>
           </div>
         </div>
         
         {isLoadingFailures ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4">
             {[1, 2, 3, 4].map((i) => (
-              <RestaurantCardSkeleton key={i} />
+              <div key={i} className="flex-shrink-0">
+                <RestaurantCardSkeleton />
+              </div>
             ))}
           </div>
         ) : recentFailures.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4">
             {recentFailures.map((restaurant) => (
-              <RestaurantCard key={restaurant.slug} restaurant={restaurant} />
+              <div key={restaurant.slug} className="flex-shrink-0">
+                <RestaurantCard restaurant={restaurant} />
+              </div>
             ))}
           </div>
         ) : (
           <Card className="bg-gray-50 border-2 border-dashed border-gray-200">
             <CardBody className="py-12 text-center">
-              <span className="text-4xl mb-3 block">✅</span>
-              <p className="text-gray-500 font-medium">No recent failures - great news!</p>
+              <span className="text-4xl mb-3 block">📊</span>
+              <p className="text-gray-500 font-medium">No recent inspections found</p>
             </CardBody>
           </Card>
         )}
@@ -270,6 +367,7 @@ export default function Home() {
       </section>
 
       <BottomNav />
+      <CardDesignControls />
     </div>
   );
 }

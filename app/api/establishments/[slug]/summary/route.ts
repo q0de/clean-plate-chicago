@@ -135,23 +135,45 @@ export async function GET(
     const inspectionType = latestInspection?.inspection_type || null;
     const rawViolations = latestInspection?.raw_violations || null;
 
-    // Fetch actual violations with codes for more accurate theme extraction
+    // Fetch violations from ALL recent inspections for comprehensive theme extraction
     let themes: string[] = [];
-    if (latestInspection?.id) {
-      const { data: violations } = await supabase
+    const allViolations: Violation[] = [];
+    const allRawViolations: string[] = [];
+    
+    if (inspections && inspections.length > 0) {
+      const inspectionIds = inspections.map(i => i.id);
+      console.log(`[Summary] Looking for violations across ${inspectionIds.length} recent inspections`);
+      
+      const { data: violations, error: violError } = await supabase
         .from("violations")
         .select("violation_code, is_critical")
-        .eq("inspection_id", latestInspection.id);
+        .in("inspection_id", inspectionIds);
+      
+      console.log(`[Summary] Found ${violations?.length || 0} violations across recent inspections, error: ${violError?.message || 'none'}`);
       
       if (violations && violations.length > 0) {
-        // Use code-based theme extraction (more accurate)
-        themes = extractViolationThemesFromCodes(violations);
-      } else {
-        // Fall back to text-based extraction
-        themes = extractViolationThemesFromText(rawViolations);
+        allViolations.push(...violations);
       }
+      
+      // Also collect raw_violations text for fallback
+      inspections.forEach(insp => {
+        if (insp.raw_violations) {
+          allRawViolations.push(insp.raw_violations);
+        }
+      });
+    }
+    
+    if (allViolations.length > 0) {
+      // Use code-based theme extraction (more accurate)
+      console.log(`[Summary] Using CODE-based extraction, codes: ${allViolations.map(v => v.violation_code).join(', ')}`);
+      themes = extractViolationThemesFromCodes(allViolations);
+    } else if (allRawViolations.length > 0) {
+      // Fall back to text-based extraction from all inspections
+      const combinedText = allRawViolations.join(' ');
+      console.log(`[Summary] Using TEXT-based extraction from ${allRawViolations.length} inspections`);
+      themes = extractViolationThemesFromText(combinedText);
     } else {
-      themes = extractViolationThemesFromText(rawViolations);
+      console.log(`[Summary] No violations or raw text found`);
     }
 
     // Use inspection data directly for freshest results

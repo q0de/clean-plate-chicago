@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom Logo Fonts */
+@font-face {
+  font-family: 'Guttery';
+  src: url('/fonts/guttery-bold-handwritten-font-2024-09-30-18-33-33-utc/Guttery.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Parslay';
+  src: url('/fonts/parslay-2024-05-21-15-45-30-utc/Parslay.woff2') format('woff2'),
+       url('/fonts/parslay-2024-05-21-15-45-30-utc/Parslay.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Violetta';
+  src: url('/fonts/violetta-rounded-script-font-2025-07-30-01-55-21-utc/Violetta/Violetta.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Welly';
+  src: url('/fonts/welly-food-font-2025-10-10-22-11-57-utc/Welly/Welly.woff2') format('woff2'),
+       url('/fonts/welly-food-font-2025-10-10-22-11-57-utc/Welly/Welly.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --color-brand: #059669;
   --color-brand-light: #d1fae5;
@@ -167,4 +202,65 @@ input:focus-visible {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* Dancing noise animation */
+@keyframes noise {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  10% {
+    transform: translate(-5%, -5%);
+  }
+  20% {
+    transform: translate(-10%, 5%);
+  }
+  30% {
+    transform: translate(5%, -10%);
+  }
+  40% {
+    transform: translate(-5%, 15%);
+  }
+  50% {
+    transform: translate(-10%, 5%);
+  }
+  60% {
+    transform: translate(15%, 0);
+  }
+  70% {
+    transform: translate(0, 10%);
+  }
+  80% {
+    transform: translate(-15%, 0);
+  }
+  90% {
+    transform: translate(10%, 5%);
+  }
+}
+
+.animate-noise {
+  animation: noise 0.5s steps(10) infinite;
+}
+
+/* Subtle hero image panning animation */
+@keyframes heroPan {
+  0% {
+    transform: scale(1.1) translate(0%, 0%);
+  }
+  25% {
+    transform: scale(1.1) translate(-1%, -0.5%);
+  }
+  50% {
+    transform: scale(1.1) translate(-0.5%, 0.5%);
+  }
+  75% {
+    transform: scale(1.1) translate(0.5%, -0.3%);
+  }
+  100% {
+    transform: scale(1.1) translate(0%, 0%);
+  }
+}
+
+.animate-hero-pan {
+  animation: heroPan 20s ease-in-out infinite;
 }
