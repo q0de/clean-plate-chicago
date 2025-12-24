@@ -1,0 +1,4 @@
+Error upserting KUBBA MOSUL L.L.C.: duplicate key value violates unique constraint "establishments_slug_key"
+TypeError: supabase.rpc(...).catch is not a function
+    at importData (C:\Users\micha\Projects\clean-plate-eating\scripts\import-real-inspections.js:401:56)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

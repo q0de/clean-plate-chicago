@@ -100,7 +100,7 @@ export async function GET(
   try {
     const { slug } = params;
 
-    // Fetch establishment with latest inspection details
+    // Fetch establishment with latest inspection details AND cached summary
     const { data: establishment, error: estError } = await supabase
       .from("establishments")
       .select(`
@@ -109,7 +109,10 @@ export async function GET(
         facility_type,
         latest_result,
         cleanplate_score,
-        latest_inspection_date
+        latest_inspection_date,
+        ai_summary,
+        ai_summary_updated_at,
+        ai_summary_score
       `)
       .eq("slug", slug)
       .single();
@@ -117,10 +120,94 @@ export async function GET(
     if (estError || !establishment) {
       return NextResponse.json(
         { error: "Establishment not found" },
-        { status: 404 }
+        { 
+          status: 404,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       );
     }
 
+    // Fetch latest inspection to check if cache is still valid
+    // We need to verify the latest inspection hasn't changed since cache was created
+    const { data: latestInspectionCheck } = await supabase
+      .from("inspections")
+      .select("inspection_date, results, violation_count, critical_count")
+      .eq("establishment_id", establishment.id)
+      .order("inspection_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    // Check if we have a valid cached summary (less than 7 days old AND matches current inspection)
+    if (establishment.ai_summary && establishment.ai_summary_updated_at) {
+      const cacheAge = (Date.now() - new Date(establishment.ai_summary_updated_at).getTime()) / (1000 * 60 * 60 * 24);
+      const cacheIsFresh = cacheAge < 7;
+      
+      // Check if latest inspection matches what the cache was based on
+      // If inspection date changed or result changed, invalidate cache
+      const cacheDate = new Date(establishment.ai_summary_updated_at);
+      const latestInspectionDate = latestInspectionCheck?.inspection_date 
+        ? new Date(latestInspectionCheck.inspection_date) 
+        : null;
+      
+      const inspectionChanged = latestInspectionDate && latestInspectionDate > cacheDate;
+      const resultChanged = latestInspectionCheck?.results && 
+        latestInspectionCheck.results !== establishment.latest_result;
+      
+      // Check if score changed (e.g., from bulk recalculation or trigger update)
+      // If ai_summary_score is NULL, treat as invalid (existing summaries without score)
+      // If score doesn't match current score, invalidate cache
+      const scoreMismatch = establishment.ai_summary_score === null || 
+        establishment.ai_summary_score !== establishment.cleanplate_score;
+      
+      if (cacheIsFresh && !inspectionChanged && !resultChanged && !scoreMismatch) {
+        // Return cached summary - skip expensive operations
+        // Still need to fetch themes though
+        const { data: inspections } = await supabase
+          .from("inspections")
+          .select("id, raw_violations")
+          .eq("establishment_id", establishment.id)
+          .order("inspection_date", { ascending: false })
+          .limit(3);
+
+        let themes: string[] = [];
+        if (inspections && inspections.length > 0) {
+          const inspectionIds = inspections.map(i => i.id);
+          const { data: violations } = await supabase
+            .from("violations")
+            .select("violation_code, is_critical")
+            .in("inspection_id", inspectionIds);
+          
+          if (violations && violations.length > 0) {
+            themes = extractViolationThemesFromCodes(violations);
+          } else {
+            const allRaw = inspections.map(i => i.raw_violations).filter(Boolean).join(' ');
+            themes = extractViolationThemesFromText(allRaw);
+          }
+        }
+
+        return NextResponse.json(
+          {
+            summary: establishment.ai_summary,
+            themes,
+            generated_at: establishment.ai_summary_updated_at,
+            cached: true,
+          },
+          {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            },
+          }
+        );
+      }
+    }
+
+    // No valid cache - generate fresh summary
     // Fetch recent inspections (last 3) for trend context in AI summary
     const { data: inspections } = await supabase
       .from("inspections")
@@ -176,9 +263,15 @@ export async function GET(
       console.log(`[Summary] No violations or raw text found`);
     }
 
-    // Use inspection data directly for freshest results
+    // CRITICAL: Always use the actual latest inspection data, not the establishments table
+    // The establishments table may be stale if score hasn't been recalculated yet
     const latestResult = latestInspection?.results || establishment.latest_result;
     const latestDate = latestInspection?.inspection_date || establishment.latest_inspection_date;
+    
+    // Log if there's a mismatch to help debug score issues
+    if (latestInspection && latestInspection.results !== establishment.latest_result) {
+      console.warn(`[Summary] Inspection result mismatch for ${establishment.dba_name}: establishments table says "${establishment.latest_result}" but latest inspection says "${latestInspection.results}". Using latest inspection data.`);
+    }
 
     // Prepare recent inspection history for AI context
     const recentInspections = inspections?.map(insp => ({
@@ -189,7 +282,9 @@ export async function GET(
     })) || [];
 
     // Generate AI summary using the actual latest inspection data with history
+    // This will use the database cache if available
     const summary = await generateAISummary({
+      establishment_id: establishment.id,
       dba_name: establishment.dba_name,
       facility_type: establishment.facility_type || "Restaurant",
       latest_result: latestResult,
@@ -202,16 +297,32 @@ export async function GET(
       recent_inspections: recentInspections.length > 1 ? recentInspections : undefined,
     });
 
-    return NextResponse.json({
-      summary,
-      themes,
-      generated_at: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      {
+        summary,
+        themes,
+        generated_at: new Date().toISOString(),
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Summary generation error:", error);
     return NextResponse.json(
       { error: "Failed to generate summary" },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     );
   }
 }

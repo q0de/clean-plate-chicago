@@ -60,10 +60,10 @@ export async function GET(request: NextRequest) {
     // Get establishment IDs
     const establishmentIds = Array.from(uniqueInspectionMap.keys());
 
-    // Fetch establishments
+    // Fetch establishments - explicitly include slug to ensure it's returned
     const { data: establishments, error: estError } = await supabase
       .from("establishments")
-      .select("*")
+      .select("*, slug") // Explicitly include slug
       .in("id", establishmentIds);
 
     if (estError) {
@@ -75,7 +75,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Merge inspection data with establishment data, maintaining order by inspection date
+    // Filter out any establishments without slugs to prevent 404 errors
     const uniqueInspections = establishments
+      ?.filter((est) => {
+        if (!est.slug || est.slug.trim() === '') {
+          console.warn(`Establishment ${est.id} (${est.dba_name}) is missing slug, filtering out`);
+          return false;
+        }
+        return true;
+      })
       ?.map((est) => {
         const inspection = uniqueInspectionMap.get(est.id);
         return {
@@ -91,13 +99,22 @@ export async function GET(request: NextRequest) {
         return dateB - dateA; // Most recent first
       }) || [];
 
-    return NextResponse.json({
-      data: uniqueInspections,
-      meta: {
-        total: uniqueInspections.length,
-        limit,
+    return NextResponse.json(
+      {
+        data: uniqueInspections,
+        meta: {
+          total: uniqueInspections.length,
+          limit,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Recent failures route error:", error);
     return NextResponse.json(

@@ -1,59 +1,45 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode } from "react";
 
-export type StatusBadgeStyle = "icon-only" | "icon-text";
+interface StatusBadgeConfig {
+  showViolationCount: boolean;
+  showViolationThemes: boolean;
+  maxThemesToShow: number;
+}
 
 interface StatusBadgeContextType {
-  style: StatusBadgeStyle;
-  setStyle: (style: StatusBadgeStyle) => void;
+  config: StatusBadgeConfig;
+  setConfig: (config: Partial<StatusBadgeConfig>) => void;
 }
+
+const defaultConfig: StatusBadgeConfig = {
+  showViolationCount: true,
+  showViolationThemes: true,
+  maxThemesToShow: 2,
+};
 
 const StatusBadgeContext = createContext<StatusBadgeContextType | undefined>(undefined);
 
-const STORAGE_KEY = "cleanplate-status-badge-style";
-
 export function StatusBadgeProvider({ children }: { children: ReactNode }) {
-  const [style, setStyleState] = useState<StatusBadgeStyle>("icon-text");
-  const [isHydrated, setIsHydrated] = useState(false);
+  const [config, setConfigState] = useState<StatusBadgeConfig>(defaultConfig);
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && (stored === "icon-only" || stored === "icon-text")) {
-      setStyleState(stored as StatusBadgeStyle);
-    }
-    setIsHydrated(true);
-  }, []);
-
-  // Persist to localStorage on change
-  const setStyle = (newStyle: StatusBadgeStyle) => {
-    setStyleState(newStyle);
-    localStorage.setItem(STORAGE_KEY, newStyle);
+  const setConfig = (newConfig: Partial<StatusBadgeConfig>) => {
+    setConfigState((prev) => ({ ...prev, ...newConfig }));
   };
 
-  // Prevent hydration mismatch by not rendering until hydrated
-  if (!isHydrated) {
-    return <>{children}</>;
-  }
-
   return (
-    <StatusBadgeContext.Provider value={{ style, setStyle }}>
+    <StatusBadgeContext.Provider value={{ config, setConfig }}>
       {children}
     </StatusBadgeContext.Provider>
   );
 }
 
-export function useStatusBadgeStyle() {
+export function useStatusBadge() {
   const context = useContext(StatusBadgeContext);
   if (context === undefined) {
-    // Return default if not in provider (e.g., during SSR)
-    return { style: "icon-text" as StatusBadgeStyle, setStyle: () => {} };
+    throw new Error("useStatusBadge must be used within a StatusBadgeProvider");
   }
   return context;
 }
-
-
-
-
 

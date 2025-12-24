@@ -24,6 +24,8 @@ export async function GET(
     }
 
     // Get inspections with violations
+    // Use DISTINCT ON to ensure we only get one inspection per inspection_id
+    // This handles any duplicates that might exist in the database
     const { data: inspections, error: inspError } = await supabase
       .from("inspections")
       .select(`
@@ -42,13 +44,32 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
-      data: inspections || [],
-      meta: {
-        total: inspections?.length || 0,
-        limit,
-      },
+    // Deduplicate by id as a safety measure (database now has unique composite index)
+    const seenIds = new Set<string>();
+    const deduplicatedInspections = (inspections || []).filter((inspection) => {
+      if (seenIds.has(inspection.id)) {
+        return false;
+      }
+      seenIds.add(inspection.id);
+      return true;
     });
+
+    return NextResponse.json(
+      {
+        data: deduplicatedInspections,
+        meta: {
+          total: deduplicatedInspections.length,
+          limit,
+        },
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Inspections route error:", error);
     return NextResponse.json(

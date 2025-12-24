@@ -165,11 +165,14 @@ async function importData() {
       for (const insp of data.inspections) {
         const violations = parseViolations(insp.violations);
         
+        // Use a consistent inspection_id format: just the numeric ID
+        const normalizedInspectionId = String(insp.inspection_id).split('-')[0].replace(/\D/g, '') || insp.inspection_id;
+        
         const { data: inspData, error: inspError } = await supabase
           .from('inspections')
           .upsert({
             establishment_id: estData.id,
-            inspection_id: insp.inspection_id,
+            inspection_id: normalizedInspectionId,
             inspection_date: insp.inspection_date,
             inspection_type: insp.inspection_type || 'Canvass',
             results: insp.results
@@ -178,7 +181,7 @@ async function importData() {
             ignoreDuplicates: false
           })
           .select()
-          .single();
+          .maybeSingle();
         
         if (inspError) {
           console.error(`Error upserting inspection:`, inspError.message);

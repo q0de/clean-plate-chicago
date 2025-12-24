@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RestaurantCard } from "@/components/RestaurantCard";
-import { RestaurantListSkeleton } from "@/components/RestaurantCardSkeleton";
+import { MapRestaurantCard } from "@/components/MapRestaurantCard";
 import { Map } from "@/components/Map";
 import { BottomNav } from "@/components/BottomNav";
 import { Map as MapIcon, ExternalLink } from "lucide-react";
@@ -164,36 +163,32 @@ export function NeighborhoodDetailClient({ neighborhood }: NeighborhoodDetailCli
       </section>
 
       {/* Recent Failures */}
-      {neighborhood.recent_failures > 0 && (
+      {neighborhood.recent_failures > 0 && restaurants.filter((r) => r.latest_result.toLowerCase().includes("fail")).length > 0 && (
         <section className="container mx-auto px-4 py-4">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <span className="text-danger">⚠️</span> Recent Failures
           </h3>
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {restaurants
               .filter((r) => r.latest_result.toLowerCase().includes("fail"))
-              .slice(0, 5)
+              .slice(0, 6)
               .map((restaurant) => (
-                <Card
-                  key={restaurant.slug}
-                  isPressable
-                  onPress={() => router.push(`/restaurant/${restaurant.slug}`)}
-                  classNames={{ base: "cursor-pointer", body: "p-4" }}
-                >
-                  <CardBody>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold">{restaurant.dba_name}</h4>
-                        <p className="text-sm text-default-500">
-                          {new Date(restaurant.latest_inspection_date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <span className="text-xs text-danger font-semibold">
-                        FAILED
-                      </span>
-                    </div>
-                  </CardBody>
-                </Card>
+                <MapRestaurantCard 
+                  key={restaurant.slug} 
+                  restaurant={{
+                    id: restaurant.slug,
+                    slug: restaurant.slug,
+                    dba_name: restaurant.dba_name,
+                    address: restaurant.address,
+                    cleanplate_score: restaurant.cleanplate_score,
+                    latest_result: restaurant.latest_result,
+                    latest_inspection_date: restaurant.latest_inspection_date,
+                    violation_count: restaurant.violation_count,
+                    risk_level: restaurant.risk_level,
+                    neighborhood: neighborhood.name,
+                  }}
+                  onClick={() => router.push(`/restaurant/${restaurant.slug}`)}
+                />
               ))}
           </div>
         </section>
@@ -221,15 +216,34 @@ export function NeighborhoodDetailClient({ neighborhood }: NeighborhoodDetailCli
         </div>
 
         {isLoading ? (
-          <RestaurantListSkeleton />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
+            ))}
+          </div>
         ) : restaurants.length === 0 ? (
           <p className="text-default-500 text-center py-8">
             No restaurants found in this neighborhood
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {restaurants.map((restaurant) => (
-              <RestaurantCard key={restaurant.slug} restaurant={restaurant} />
+              <MapRestaurantCard 
+                key={restaurant.slug} 
+                restaurant={{
+                  id: restaurant.slug,
+                  slug: restaurant.slug,
+                  dba_name: restaurant.dba_name,
+                  address: restaurant.address,
+                  cleanplate_score: restaurant.cleanplate_score,
+                  latest_result: restaurant.latest_result,
+                  latest_inspection_date: restaurant.latest_inspection_date,
+                  violation_count: restaurant.violation_count,
+                  risk_level: restaurant.risk_level,
+                  neighborhood: neighborhood.name,
+                }}
+                onClick={() => router.push(`/restaurant/${restaurant.slug}`)}
+              />
             ))}
           </div>
         )}

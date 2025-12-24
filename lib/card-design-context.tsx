@@ -75,7 +75,7 @@ const defaultConfig: CardDesignConfig = {
   logoFont: "default",
   logoColor: "#047857", // emerald-700
   logoSize: 24, // text size in pixels
-  logoIconSize: 32, // icon size in pixels
+  logoIconSize: 120, // icon size in pixels
   headerPadding: 12, // vertical padding in pixels
   heroWatermarkOpacity: 0.12, // opacity for watermark (0-1)
   heroWatermarkSize: 400, // watermark size in pixels

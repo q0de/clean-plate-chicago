@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { generateAISummary } from "@/lib/ai-summary";
 
 // Extract key violation themes from raw violations text
 function extractViolationThemes(rawViolations: string | null): string[] {
@@ -145,6 +144,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const neighborhoodSlug = searchParams.get("neighborhood_slug");
     const neighborhoodBoundary = searchParams.get("neighborhood_boundary"); // JSON string of boundary
+    const lightMode = searchParams.get("light") === "true"; // Fast mode - minimal data for markers
 
     if (!lat || !lng) {
       return NextResponse.json(
@@ -166,13 +166,17 @@ export async function GET(request: NextRequest) {
         .single();
       
       if (neighborhood) {
+        // For neighborhood queries, return ALL establishments without limit
+        // Sort by latest_inspection_date to show most recently inspected first
+        // This ensures we get the full distribution of Pass/Fail/Conditional
+        // Use limit(5000) to override Supabase's default 1000 row limit
         const { data: neighEstablishments, error: neighError } = await supabase
           .from("establishments")
           .select("*, neighborhood:neighborhoods(name, slug)")
           .eq("neighborhood_id", neighborhood.id)
           .not("neighborhood_id", "is", null)
-          .order("cleanplate_score", { ascending: false })
-          .limit(limit);
+          .order("latest_inspection_date", { ascending: false })
+          .limit(5000);
         
         if (neighError) {
           console.error("Neighborhood establishments error:", neighError);
@@ -219,16 +223,69 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get establishment IDs to fetch latest inspection details
+    // LIGHT MODE: Return minimal data for fast initial map load
+    // Only includes fields needed for markers: id, slug, name, address, score, result, coords, facility_type
+    if (lightMode) {
+      // For neighborhood queries, return all data (no limit) to show full distribution
+      // For radius queries, apply the limit
+      const dataToProcess = neighborhoodSlug ? filteredData : filteredData.slice(0, limit);
+      const lightData = dataToProcess.map((item: Record<string, unknown>) => {
+        // Extract neighborhood from joined data
+        let neighborhoodName: string | null = null;
+        let neighborhoodSlug: string | null = null;
+        if (item.neighborhood && typeof item.neighborhood === 'object') {
+          const neighborhood = item.neighborhood as { name: string; slug?: string };
+          neighborhoodName = neighborhood.name;
+          neighborhoodSlug = neighborhood.slug || null;
+        }
+        
+        return {
+          id: item.id,
+          slug: item.slug,
+          dba_name: item.dba_name,
+          address: item.address,
+          cleanplate_score: item.cleanplate_score,
+          latest_result: item.latest_result,
+          latest_inspection_date: item.latest_inspection_date,
+          latitude: typeof item.latitude === 'string' ? parseFloat(item.latitude) : item.latitude,
+          longitude: typeof item.longitude === 'string' ? parseFloat(item.longitude) : item.longitude,
+          facility_type: item.facility_type,
+          neighborhood: neighborhoodName,
+          neighborhood_slug: neighborhoodSlug,
+        };
+      });
+      
+      return NextResponse.json(
+        {
+          data: lightData,
+          meta: {
+            total: lightData.length,
+            limit,
+            offset: 0,
+            has_more: filteredData.length > limit,
+            light_mode: true,
+          },
+        },
+        {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
+      );
+    }
+
+    // FULL MODE: Fetch additional inspection details, AI summaries, etc.
     const establishmentIds = filteredData.map((item: Record<string, unknown>) => item.id);
     
-    // Fetch latest inspection for each establishment
-    let inspectionMap: Record<string, { inspection_type: string; raw_violations: string; critical_count: number; violation_count: number }> = {};
+    // Fetch latest inspection for each establishment (including date and result for cache validation)
+    let inspectionMap: Record<string, { inspection_type: string; raw_violations: string; critical_count: number; violation_count: number; inspection_date: string; results: string }> = {};
     
     if (establishmentIds.length > 0) {
       const { data: inspections } = await supabase
         .from("inspections")
-        .select("establishment_id, inspection_type, raw_violations, critical_count, violation_count")
+        .select("establishment_id, inspection_type, raw_violations, critical_count, violation_count, inspection_date, results")
         .in("establishment_id", establishmentIds)
         .order("inspection_date", { ascending: false });
       
@@ -267,7 +324,8 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Generate AI summaries in parallel
+    // Use cached AI summaries from database (already fetched with establishment data)
+    // Only generate new summaries for items without cached ones
     const enhanced = await Promise.all(
       limitedData.map(async (item: Record<string, unknown>) => {
         const inspection = inspectionMap[item.id as string];
@@ -288,25 +346,42 @@ export async function GET(request: NextRequest) {
           neighborhoodSlug = neighborhood.slug;
         }
         
-        // Generate real AI summary
-        let aiSummary: string | null = null;
-        try {
-          aiSummary = await generateAISummary({
-            dba_name: item.dba_name as string,
-            facility_type: (item.facility_type as string) || "Restaurant",
-            latest_result: item.latest_result as string,
-            cleanplate_score: (item.cleanplate_score as number) || 0,
-            violation_count: inspection?.violation_count || 0,
-            critical_count: inspection?.critical_count || 0,
-            raw_violations: inspection?.raw_violations || null,
-            inspection_type: inspection?.inspection_type || null,
-            latest_inspection_date: (item.latest_inspection_date as string) || null,
-          });
-        } catch (e) {
-          console.error("AI summary error:", e);
-          // Fall back to template summary
+        // Check for cached AI summary and validate cache
+        let aiSummary: string | null = (item.ai_summary as string) || null;
+        let useCachedSummary = false;
+        
+        // Check if cache is valid (exists, fresh, and matches current inspection)
+        if (aiSummary && item.ai_summary_updated_at) {
+          const cacheAge = (Date.now() - new Date(item.ai_summary_updated_at as string).getTime()) / (1000 * 60 * 60 * 24);
+          const cacheIsFresh = cacheAge < 7;
+          
+          // Check if latest inspection matches what the cache was based on
+          const cacheDate = new Date(item.ai_summary_updated_at as string);
+          const latestInspectionDate = inspection?.inspection_date 
+            ? new Date(inspection.inspection_date) 
+            : null;
+          
+          const inspectionChanged = latestInspectionDate && latestInspectionDate > cacheDate;
+          const resultChanged = inspection?.results && 
+            inspection.results !== (item.latest_result as string);
+          
+          // Check if score changed (e.g., from bulk recalculation or trigger update)
+          // If ai_summary_score is NULL, treat as invalid (existing summaries without score)
+          // If score doesn't match current score, invalidate cache
+          const currentScore = (item.cleanplate_score as number) ?? null;
+          const cachedScore = (item.ai_summary_score as number) ?? null;
+          const scoreMismatch = cachedScore === null || cachedScore !== currentScore;
+          
+          // Cache is valid if fresh AND inspection hasn't changed AND score matches
+          if (cacheIsFresh && !inspectionChanged && !resultChanged && !scoreMismatch) {
+            useCachedSummary = true;
+          }
+        }
+        
+        // If no valid cache, use template summary (don't generate AI here)
+        if (!useCachedSummary) {
           aiSummary = generateInspectionSummary(
-            item.latest_result as string,
+            inspection?.results || (item.latest_result as string),
             inspection?.inspection_type || null,
             inspection?.violation_count || 0,
             inspection?.critical_count || 0,
@@ -314,8 +389,8 @@ export async function GET(request: NextRequest) {
           );
         }
         
-        // Remove the nested neighborhood object and add flat neighborhood field
-        const { neighborhood: _, ...restItem } = item;
+        // Remove the nested neighborhood object and internal cache fields
+        const { neighborhood: _, ai_summary: __, ai_summary_updated_at: ___, ...restItem } = item;
         
         return {
           ...restItem,
@@ -332,16 +407,25 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({
-      data: enhanced,
-      meta: {
-        total: enhanced.length,
-        limit,
-        offset: 0,
-        has_more: filteredData.length > limit,
-        neighborhood_filtered: !!neighborhoodBoundary,
+    return NextResponse.json(
+      {
+        data: enhanced,
+        meta: {
+          total: enhanced.length,
+          limit,
+          offset: 0,
+          has_more: filteredData.length > limit,
+          neighborhood_filtered: !!neighborhoodBoundary,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Nearby route error:", error);
     return NextResponse.json(

@@ -20,6 +20,7 @@ interface Neighborhood {
   id: string;
   name: string;
   slug: string;
+  alias?: string;
   center_lat?: number;
   center_lng?: number;
   restaurant_count?: number;
@@ -40,9 +41,13 @@ function MapPageContent() {
   const [selectedNeighborhoodData, setSelectedNeighborhoodData] = useState<Neighborhood | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [colorMode, setColorMode] = useState<"inspection" | "score">("inspection");
   
   // Default to Loop coordinates if no URL params
-  const hasUrlParams = !!(searchParams.get("lng") || searchParams.get("lat") || searchParams.get("zoom"));
+  const hasUrlParams = !!(searchParams.get("lng") || searchParams.get("lat") || searchParams.get("zoom") || searchParams.get("neighborhood"));
+  const targetRestaurantSlug = searchParams.get("slug"); // Restaurant to highlight by slug
+  const targetRestaurantId = searchParams.get("selected"); // Restaurant to highlight by ID
+  const targetNeighborhoodSlug = searchParams.get("neighborhood"); // Neighborhood to highlight
   const initialCenter: [number, number] = hasUrlParams
     ? [
         parseFloat(searchParams.get("lng") || "-87.6298"),
@@ -64,16 +69,41 @@ function MapPageContent() {
     try {
       const fetchLat = lat ?? centerRef.current[1];
       const fetchLng = lng ?? centerRef.current[0];
-      let url = `/api/nearby?lat=${fetchLat}&lng=${fetchLng}&radius_miles=3&limit=100`;
+      // Use light mode for fast initial load - only essential data for markers
+      // For neighborhood queries, API returns all establishments (no limit)
+      // For radius queries, use a reasonable limit
+      let url = `/api/nearby?lat=${fetchLat}&lng=${fetchLng}&radius_miles=3&limit=500&light=true`;
       
-      // Pass neighborhood slug for database-level filtering
+      // Pass neighborhood slug for database-level filtering (returns all in neighborhood)
       if (neighborhoodSlug) {
         url += `&neighborhood_slug=${encodeURIComponent(neighborhoodSlug)}`;
       }
       
       const res = await fetch(url);
       const data = await res.json();
-      let restaurantsData = data.data || [];
+      
+      // Debug: Log all restaurants to check for slug issues
+      const allRestaurants = data.data || [];
+      const restaurantsWithSlugs = allRestaurants.filter((r: Restaurant) => r.slug && String(r.slug).trim() !== "");
+      const restaurantsWithoutSlugs = allRestaurants.filter((r: Restaurant) => !r.slug || String(r.slug).trim() === "");
+      
+      if (restaurantsWithoutSlugs.length > 0) {
+        console.warn(`Filtered out ${restaurantsWithoutSlugs.length} restaurants missing slugs:`, 
+          restaurantsWithoutSlugs.map((r: Restaurant) => ({ id: r.id, name: r.dba_name, slug: r.slug }))
+        );
+      }
+      
+      let restaurantsData = restaurantsWithSlugs.map((r: Restaurant) => ({
+        ...r,
+        slug: String(r.slug).trim(),
+      }));
+      
+      // Additional check: log any slugs that look problematic
+      restaurantsData.forEach((r: Restaurant) => {
+        if (!r.slug || r.slug.length === 0) {
+          console.error("Restaurant in filtered list still has no slug:", r);
+        }
+      });
       
       // Additional validation: if neighborhood is selected, ensure all restaurants belong to it
       if (neighborhoodSlug) {
@@ -95,7 +125,42 @@ function MapPageContent() {
     if (hasInitialized) return; // Only run once
     setHasInitialized(true);
     
-    if (!hasUrlParams) {
+    // If neighborhood param is in URL, load that neighborhood
+    if (targetNeighborhoodSlug) {
+      const loadTargetNeighborhood = async () => {
+        try {
+          const res = await fetch(`/api/neighborhoods/${targetNeighborhoodSlug}`);
+          const data = await res.json();
+          if (data.data) {
+            const neighborhood = data.data;
+            setSelectedNeighborhood(neighborhood.slug);
+            setSelectedNeighborhoodData(neighborhood);
+            
+            // Use URL lat/lng if provided, otherwise use neighborhood center
+            const urlLat = searchParams.get("lat");
+            const urlLng = searchParams.get("lng");
+            const neighborhoodCenter: [number, number] = urlLat && urlLng
+              ? [parseFloat(urlLng), parseFloat(urlLat)]
+              : neighborhood.center_lng && neighborhood.center_lat
+                ? [neighborhood.center_lng, neighborhood.center_lat]
+                : [-87.6298, 41.8781];
+            
+            centerRef.current = neighborhoodCenter;
+            if (mapRef.current) {
+              mapRef.current.flyTo(neighborhoodCenter, 14);
+            }
+            
+            // Fetch restaurants for this neighborhood
+            await fetchRestaurants(neighborhoodCenter[1], neighborhoodCenter[0], neighborhood.slug);
+          }
+        } catch (error) {
+          console.error("Failed to load target neighborhood:", error);
+          fetchRestaurants();
+        }
+      };
+      
+      loadTargetNeighborhood();
+    } else if (!hasUrlParams) {
       // Default to Loop neighborhood
       const loadLoopNeighborhood = async () => {
         try {
@@ -131,7 +196,47 @@ function MapPageContent() {
       // Use URL params or default
       fetchRestaurants();
     }
-  }, [fetchRestaurants, hasUrlParams, hasInitialized]);
+  }, [fetchRestaurants, hasUrlParams, hasInitialized, targetNeighborhoodSlug, searchParams]);
+
+  // Handle selecting a specific restaurant from URL slug param
+  useEffect(() => {
+    if (targetRestaurantSlug && restaurants.length > 0 && !isLoading) {
+      const targetRestaurant = restaurants.find(r => r.slug === targetRestaurantSlug);
+      if (targetRestaurant) {
+        // Select and highlight the restaurant
+        setSelectedRestaurantId(targetRestaurant.id);
+        setHoveredRestaurantId(targetRestaurant.id);
+        
+        // Pan map to restaurant with a slight delay to ensure map is ready
+        setTimeout(() => {
+          if (mapRef.current) {
+            mapRef.current.flyTo([targetRestaurant.longitude, targetRestaurant.latitude], 16);
+          }
+        }, 500);
+        
+        // Show mobile sidebar on mobile
+        setShowMobileSidebar(true);
+      }
+    }
+  }, [targetRestaurantSlug, restaurants, isLoading]);
+
+  // Handle selecting a specific restaurant from URL ID param (from detail page "View Interactive Map")
+  useEffect(() => {
+    if (targetRestaurantId && !isLoading) {
+      // Select and highlight the restaurant immediately
+      setSelectedRestaurantId(targetRestaurantId);
+      setHoveredRestaurantId(targetRestaurantId);
+      
+      // Show mobile sidebar on mobile
+      setShowMobileSidebar(true);
+      
+      // If the restaurant is in our list, fly to it
+      const targetRestaurant = restaurants.find(r => r.id === targetRestaurantId);
+      if (targetRestaurant && mapRef.current) {
+        mapRef.current.flyTo([targetRestaurant.longitude, targetRestaurant.latitude], 17);
+      }
+    }
+  }, [targetRestaurantId, restaurants, isLoading]);
 
   const handleNeighborhoodSelect = (neighborhood: Neighborhood | null) => {
     if (neighborhood) {
@@ -225,6 +330,8 @@ function MapPageContent() {
             onSearch={handleSearch}
             selectedNeighborhood={selectedNeighborhood}
             selectedNeighborhoodData={selectedNeighborhoodData}
+            colorMode={colorMode}
+            onColorModeChange={setColorMode}
           />
         </div>
 
@@ -239,6 +346,7 @@ function MapPageContent() {
             onMoveEnd={handleMapMove}
             highlightedId={hoveredRestaurantId || selectedRestaurantId}
             selectedNeighborhoodSlug={selectedNeighborhood}
+            colorMode={colorMode}
             className="absolute inset-0"
           />
 
@@ -307,6 +415,8 @@ function MapPageContent() {
                 onSearch={handleSearch}
                 selectedNeighborhood={selectedNeighborhood}
                 selectedNeighborhoodData={selectedNeighborhoodData}
+                colorMode={colorMode}
+                onColorModeChange={setColorMode}
               />
             </div>
           </div>

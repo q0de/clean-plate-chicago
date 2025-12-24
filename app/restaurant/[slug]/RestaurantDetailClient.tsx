@@ -4,10 +4,52 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ScoreStatusDisplay } from "@/components/ScoreStatusDisplay";
 import { ScoreTrendChart } from "@/components/ScoreTrendChart";
+import { ViolationsTrendChart } from "@/components/ViolationsTrendChart";
 import { InspectionTimeline, TimelineInspection } from "@/components/InspectionTimeline";
 import { Map as MapComponent } from "@/components/Map";
 import { BottomNav } from "@/components/BottomNav";
-import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle, AlertCircle, Wrench, Utensils, FileText, Hand, Phone } from "lucide-react";
+import { Share2, MapPin, ExternalLink, ChevronLeft, Clock, AlertTriangle, Building2, TrendingUp, TrendingDown, History, Sparkles, Trophy, Zap, ShieldCheck, ShieldAlert, Award, Star, Bug, Thermometer, Droplets, Sparkle, AlertCircle, Wrench, Utensils, FileText, Hand, Phone, Store, GraduationCap, Cake, Coffee, UtensilsCrossed, Beer, Truck, Hotel, Heart, ShoppingBag } from "lucide-react";
+
+// Map facility types to badge configurations
+function getFacilityTypeBadge(facilityType: string): {
+  icon: React.ReactNode;
+  label: string;
+  bgColor: string;
+  textColor: string;
+} {
+  const type = facilityType.toLowerCase();
+  
+  if (type.includes("school") || type.includes("daycare") || type.includes("children")) {
+    return { icon: <GraduationCap className="w-3.5 h-3.5" />, label: "School", bgColor: "bg-blue-100", textColor: "text-blue-700" };
+  }
+  if (type.includes("bakery")) {
+    return { icon: <Cake className="w-3.5 h-3.5" />, label: "Bakery", bgColor: "bg-pink-100", textColor: "text-pink-700" };
+  }
+  if (type.includes("coffee") || type.includes("cafe")) {
+    return { icon: <Coffee className="w-3.5 h-3.5" />, label: "Café", bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  if (type.includes("caterer") || type.includes("catering")) {
+    return { icon: <Truck className="w-3.5 h-3.5" />, label: "Caterer", bgColor: "bg-purple-100", textColor: "text-purple-700" };
+  }
+  if (type.includes("bar") || type.includes("tavern") || type.includes("pub") || type.includes("liquor")) {
+    return { icon: <Beer className="w-3.5 h-3.5" />, label: "Bar", bgColor: "bg-amber-100", textColor: "text-amber-700" };
+  }
+  if (type.includes("grocery") || type.includes("market") || type.includes("store")) {
+    return { icon: <ShoppingBag className="w-3.5 h-3.5" />, label: "Grocery", bgColor: "bg-green-100", textColor: "text-green-700" };
+  }
+  if (type.includes("hospital") || type.includes("nursing") || type.includes("assisted") || type.includes("healthcare")) {
+    return { icon: <Heart className="w-3.5 h-3.5" />, label: "Healthcare", bgColor: "bg-red-100", textColor: "text-red-700" };
+  }
+  if (type.includes("hotel") || type.includes("motel")) {
+    return { icon: <Hotel className="w-3.5 h-3.5" />, label: "Hotel", bgColor: "bg-indigo-100", textColor: "text-indigo-700" };
+  }
+  if (type.includes("restaurant")) {
+    return { icon: <UtensilsCrossed className="w-3.5 h-3.5" />, label: "Restaurant", bgColor: "bg-orange-100", textColor: "text-orange-700" };
+  }
+  
+  // Default - generic food establishment
+  return { icon: <Store className="w-3.5 h-3.5" />, label: facilityType || "Food Service", bgColor: "bg-gray-100", textColor: "text-gray-700" };
+}
 import { formatDistanceToNow } from "date-fns";
 
 interface Restaurant {
@@ -19,7 +61,7 @@ interface Restaurant {
   city: string;
   state: string;
   zip?: string;
-  neighborhood?: { name: string; slug: string };
+  neighborhood?: { name: string; slug: string; alias?: string };
   cleanplate_score: number;
   latest_result: string;
   latest_inspection_date: string;
@@ -115,7 +157,9 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
     phone: string | null;
     isOpenNow: boolean | null;
     yelpUrl: string | null;
-  }>({ imageUrl: null, phone: null, isOpenNow: null, yelpUrl: null });
+    tagline: string | null;
+    categories: string[] | null;
+  }>({ imageUrl: null, phone: null, isOpenNow: null, yelpUrl: null, tagline: null, categories: null });
   const [isLoadingExternalData, setIsLoadingExternalData] = useState(true);
   
   // Badge computation based on inspection history
@@ -332,14 +376,28 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
   
   const badges = useMemo(() => computeBadges(inspections, status), [inspections, status]);
 
+  // Helper function to deduplicate inspections by UUID id (safety measure)
+  const deduplicateInspections = (inspections: TimelineInspection[]): TimelineInspection[] => {
+    const seenIds = new Set<string>();
+    return inspections.filter((inspection) => {
+      if (seenIds.has(inspection.id)) {
+        return false;
+      }
+      seenIds.add(inspection.id);
+      return true;
+    });
+  };
+
   // Initial fetch - just 4 inspections (3 visible + 1 teaser)
   useEffect(() => {
     fetch(`/api/establishments/${restaurant.slug}/inspections?limit=${INITIAL_INSPECTION_COUNT}&offset=0`)
       .then((res) => res.json())
       .then((data) => {
-        setInspections(data.data || []);
-        setHasMore(data.meta?.has_more ?? (data.data?.length === INITIAL_INSPECTION_COUNT));
-        setOffset(data.data?.length || 0);
+        const inspections = data.data || [];
+        const deduplicated = deduplicateInspections(inspections);
+        setInspections(deduplicated);
+        setHasMore(data.meta?.has_more ?? (deduplicated.length === INITIAL_INSPECTION_COUNT));
+        setOffset(deduplicated.length);
         setIsLoadingInspections(false);
       })
       .catch(() => setIsLoadingInspections(false));
@@ -365,6 +423,8 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
           name: restaurant.dba_name,
           address: restaurant.address,
           extended: "true",
+          establishment_id: restaurant.id,
+          facility_type: restaurant.facility_type || "Restaurant",
         });
         const res = await fetch(`/api/restaurant-image?${params}`);
         const data = await res.json();
@@ -373,6 +433,8 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
           phone: data.phone || null,
           isOpenNow: data.isOpenNow ?? null,
           yelpUrl: data.yelpUrl || null,
+          tagline: data.tagline || null,
+          categories: data.categories || null,
         });
       } catch (error) {
         console.error("Failed to fetch external data:", error);
@@ -381,7 +443,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
       }
     };
     fetchExternalData();
-  }, [restaurant.dba_name, restaurant.address]);
+  }, [restaurant.id, restaurant.dba_name, restaurant.address, restaurant.facility_type]);
 
   // Load more handler - lazy loads additional inspections
   const handleLoadMore = async (): Promise<TimelineInspection[]> => {
@@ -393,7 +455,11 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
       const data = await res.json();
       const newInspections = data.data || [];
       
-      setInspections(prev => [...prev, ...newInspections]);
+      // Deduplicate new inspections and merge with existing, removing any duplicates
+      setInspections(prev => {
+        const combined = [...prev, ...newInspections];
+        return deduplicateInspections(combined);
+      });
       setHasMore(data.meta?.has_more ?? (newInspections.length === LOAD_MORE_COUNT));
       setOffset(prev => prev + newInspections.length);
       
@@ -440,27 +506,16 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
 
   return (
     <div className="min-h-screen bg-[#f6f8f6] pb-24">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      {/* Back button - goes back to previous page (map, search, etc.) */}
+      <div className="px-4 sm:px-6 lg:px-8 pt-4 mb-4">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 text-gray-500 hover:text-emerald-600 transition-colors group"
+          className="flex items-center gap-1.5 text-gray-500 hover:text-emerald-600 transition-colors group"
         >
           <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="font-bold text-sm">Back to Search</span>
+          <span className="font-medium text-sm">Back</span>
         </button>
-        <div className="hidden sm:flex items-center gap-2">
-          <ShieldCheck className="w-5 h-5 text-emerald-500" />
-          <span className="font-bold text-lg tracking-tight">CleanPlate Chicago</span>
-        </div>
-        <button
-          onClick={handleShare}
-          className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-          aria-label="Share"
-        >
-          <Share2 className="w-5 h-5 text-gray-600" />
-        </button>
-      </header>
+      </div>
 
       {/* Main Content - Two Column Layout */}
       <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 gap-8 grid grid-cols-1 lg:grid-cols-12">
@@ -469,42 +524,90 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
         <div className="lg:col-span-8 flex flex-col gap-6">
           
           {/* Score Hero Section */}
-          <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
-              {/* Score Circle */}
-              <div className="relative w-32 h-32 flex-shrink-0">
-                <svg className="w-full h-full" viewBox="0 0 100 100">
-                  <circle 
-                    className="fill-none stroke-gray-100" 
-                    cx="50" cy="50" r="45" 
-                    strokeWidth="8"
-                  />
-                  <circle 
-                    className={`fill-none ${
-                      status === 'fail' ? 'stroke-red-500' : 
-                      status === 'conditional' ? 'stroke-amber-500' : 
-                      status === 'closed' ? 'stroke-gray-400' :
-                      'stroke-emerald-500'
-                    }`}
-                    cx="50" cy="50" r="45" 
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray="283"
-                    strokeDashoffset={283 - (restaurant.cleanplate_score / 100) * 283}
-                    style={{ transform: 'rotate(-90deg)', transformOrigin: '50% 50%' }}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-black tracking-tighter">{restaurant.cleanplate_score}</span>
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Score</span>
+          <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200 relative overflow-hidden">
+            {/* Watermark Logo - bottom right, clipped */}
+            <div 
+              className="absolute -bottom-8 -right-8 pointer-events-none opacity-[0.06]"
+            >
+              <img 
+                src="/images/logo_5.webp" 
+                alt="" 
+                className="w-56 h-auto"
+              />
+            </div>
+            
+            {/* Share Button */}
+            <button
+              onClick={handleShare}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full hover:bg-gray-100 transition-colors group"
+              aria-label="Share"
+              title="Share this page"
+            >
+              <Share2 className="w-5 h-5 text-gray-400 group-hover:text-emerald-600 transition-colors" />
+            </button>
+            
+            <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-8">
+              {/* Score Circle - color based on score thresholds (4 tiers) */}
+              <div className="flex flex-col items-center flex-shrink-0">
+                <div className="relative w-36 h-36">
+                  <svg className="w-full h-full" viewBox="0 0 120 120">
+                    {/* Define circular text path */}
+                    <defs>
+                      <path
+                        id="circleTextPath"
+                        d="M 60, 60 m -52, 0 a 52,52 0 1,1 104,0 a 52,52 0 1,1 -104,0"
+                        fill="none"
+                      />
+                    </defs>
+                    
+                    {/* Circular text - CLEANPLATE SCORE */}
+                    <text className="fill-gray-400 text-[8px] font-bold uppercase tracking-[0.3em]">
+                      <textPath href="#circleTextPath" startOffset="15%">
+                        CLEANPLATE SCORE
+                      </textPath>
+                    </text>
+                    
+                    {/* Background circle */}
+                    <circle 
+                      className="fill-none stroke-gray-100" 
+                      cx="60" cy="60" r="42" 
+                      strokeWidth="8"
+                    />
+                    {/* Progress circle */}
+                    <circle 
+                      className={`fill-none ${
+                        status === 'closed' ? 'stroke-gray-400' :
+                        restaurant.cleanplate_score >= 90 ? 'stroke-teal-500' :
+                        restaurant.cleanplate_score >= 80 ? 'stroke-emerald-500' : 
+                        restaurant.cleanplate_score >= 60 ? 'stroke-amber-500' : 
+                        'stroke-red-500'
+                      }`}
+                      cx="60" cy="60" r="42" 
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray="264"
+                      strokeDashoffset={264 - (restaurant.cleanplate_score / 100) * 264}
+                      style={{ transform: 'rotate(-90deg)', transformOrigin: '60px 60px' }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-3xl font-bold tracking-tighter ${
+                      status === 'closed' ? 'text-gray-400' :
+                      restaurant.cleanplate_score >= 90 ? 'text-teal-600' :
+                      restaurant.cleanplate_score >= 80 ? 'text-emerald-600' : 
+                      restaurant.cleanplate_score >= 60 ? 'text-amber-600' : 
+                      'text-red-600'
+                    }`}>{restaurant.cleanplate_score}</span>
+                  </div>
                 </div>
               </div>
 
               {/* Status & Badges */}
               <div className="flex flex-col gap-4 text-center sm:text-left flex-grow">
                 <div>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Inspection</span>
                   <div className="flex items-center justify-center sm:justify-start gap-3 mb-1">
-                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{statusLabel}</h1>
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{statusLabel}</h1>
                     <span className={`${statusBadgeColor} px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide`}>
                       {isOutOfBusiness ? 'Out of Business' : 'Active License'}
                     </span>
@@ -580,11 +683,11 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
             </div>
           </section>
 
-          {/* Score History Chart */}
+          {/* Score / Result History Chart */}
           <section className="bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col gap-1 mb-6">
               <h3 className="text-lg font-bold">Score History</h3>
-              <span className="text-sm text-gray-500">Last 12 Months</span>
+              <p className="text-sm text-gray-500">CleanPlate score trend based on inspection results</p>
             </div>
             {isLoadingInspections ? (
               <div className="h-64 bg-gray-50 rounded-xl animate-pulse" />
@@ -650,33 +753,53 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
               </div>
             </div>
             <div className="p-6">
-              <h2 className="text-2xl font-black tracking-tight mb-1">{restaurant.dba_name}</h2>
-              {restaurant.aka_name && (
-                <p className="text-gray-500 text-sm mb-4">Also known as: {restaurant.aka_name}</p>
+              <h2 className="text-2xl font-bold tracking-tight">{restaurant.dba_name}</h2>
+              {/* Also known as - only show if different from DBA name */}
+              {restaurant.aka_name && restaurant.aka_name.toLowerCase() !== restaurant.dba_name.toLowerCase() && (
+                <p className="text-gray-400 text-xs mt-1">Also known as: {restaurant.aka_name}</p>
               )}
+              {/* Business Type Badge */}
+              {(() => {
+                const badge = getFacilityTypeBadge(restaurant.facility_type);
+                return (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mt-2 mb-4 ${badge.bgColor} ${badge.textColor}`}>
+                    {badge.icon}
+                    {badge.label}
+                  </span>
+                );
+              })()}
               <div className="flex flex-col gap-3 mb-6">
+                {/* Address */}
                 <div className="flex items-start gap-3">
-                  <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="font-medium text-sm">{restaurant.address}</p>
-                    <p className="text-gray-500 text-sm">{restaurant.city}, {restaurant.state} {restaurant.zip}</p>
+                    <p className="text-sm text-gray-700">{restaurant.address}</p>
+                    <p className="text-sm text-gray-500">{restaurant.city}, {restaurant.state} {restaurant.zip}</p>
                   </div>
                 </div>
-                {restaurant.neighborhood && (
-                  <div className="flex items-center gap-3">
-                    <Building2 className="w-5 h-5 text-gray-400" />
-                    <button 
-                      onClick={() => router.push(`/neighborhood/${restaurant.neighborhood!.slug}`)}
-                      className="text-sm font-bold text-emerald-600 hover:underline"
-                    >
-                      {restaurant.neighborhood.name}
-                    </button>
-                  </div>
-                )}
+                {/* Neighborhood */}
+                <div className="flex items-center gap-3">
+                  <Building2 className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  {restaurant.neighborhood ? (
+                    <div className="flex flex-col">
+                      <button 
+                        onClick={() => router.push(`/map?neighborhood=${restaurant.neighborhood!.slug}&lat=${restaurant.latitude}&lng=${restaurant.longitude}`)}
+                        className="text-sm font-bold text-emerald-600 hover:underline text-left"
+                      >
+                        {restaurant.neighborhood.name}
+                      </button>
+                      {restaurant.neighborhood.alias && (
+                        <span className="text-xs text-gray-400">also known as {restaurant.neighborhood.alias}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500">Chicago</span>
+                  )}
+                </div>
                 {/* Phone Number from Yelp */}
                 {externalData.phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="w-5 h-5 text-gray-400" />
+                    <Phone className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     <a 
                       href={`tel:${externalData.phone.replace(/[^0-9+]/g, '')}`}
                       className="text-sm text-gray-600 hover:text-emerald-600"
@@ -770,7 +893,7 @@ export function RestaurantDetailClient({ restaurant }: RestaurantDetailClientPro
             <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent pointer-events-none" />
             <div className="absolute bottom-4 left-4 right-4">
               <button 
-                onClick={() => router.push(`/map?lat=${restaurant.latitude}&lng=${restaurant.longitude}`)}
+                onClick={() => router.push(`/map?lat=${restaurant.latitude}&lng=${restaurant.longitude}&zoom=17&selected=${restaurant.id}`)}
                 className="w-full bg-white text-gray-900 text-sm font-bold py-2 rounded-lg shadow-md hover:bg-gray-50 transition-colors"
               >
                 View Interactive Map

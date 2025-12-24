@@ -43,11 +43,11 @@ export interface Violation {
   violation_description: string;
   violation_comment?: string;
   is_critical: boolean;
-  plain_english?: string;
 }
 
 export interface TimelineInspection {
   id: string;
+  inspection_id?: string; // Business key from database, optional for backwards compatibility
   inspection_date: string;
   inspection_type: string;
   results: string;
@@ -267,7 +267,7 @@ export function InspectionTimeline({
                                     )}
                                   </div>
                                   <p className="text-sm text-gray-700">
-                                    {violation.plain_english || violation.violation_description}
+                                    {violation.violation_description}
                                   </p>
                                   {violation.violation_comment && (
                                     <p className="text-xs text-gray-500 mt-2 italic">

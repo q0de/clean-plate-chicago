@@ -137,7 +137,10 @@ async function backfillViolations() {
     if (allViolations.length > 0) {
       const { error: insertError } = await supabase
         .from("violations")
-        .insert(allViolations);
+        .upsert(allViolations, {
+          onConflict: 'inspection_id,violation_code',
+          ignoreDuplicates: true
+        });
 
       if (insertError) {
         console.error(`❌ Error inserting batch:`, insertError.message);

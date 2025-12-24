@@ -7,6 +7,7 @@ interface Neighborhood {
   id: string;
   name: string;
   slug: string;
+  alias?: string;
   center_lat?: number;
   center_lng?: number;
   pass_rate?: number;
@@ -26,9 +27,9 @@ const BOUNDARIES_URL = "https://data.cityofchicago.org/resource/igwz-8jzy.geojso
 const NEIGHBORHOOD_ALIASES: Record<string, string[]> = {
   "lower-west-side": ["pilsen", "heart of chicago"],
   "lake-view": ["wrigleyville", "boystown", "southport corridor"],
-  "near-west-side": ["little italy", "greektown", "medical district", "tri-taylor", "university village"],
+  "near-west-side": ["west loop", "little italy", "greektown", "medical district", "tri-taylor", "university village"],
   "armour-square": ["chinatown"],
-  "near-north-side": ["gold coast", "old town", "cabrini-green", "goose island"],
+  "near-north-side": ["gold coast", "river north", "streeterville", "old town", "cabrini-green", "goose island"],
   "west-town": ["wicker park", "bucktown", "ukrainian village", "east village", "noble square", "smith park"],
   "logan-square": ["palmer square", "belmont gardens"],
   "lincoln-park": ["old town", "ranch triangle", "sheffield", "wrightwood"],
@@ -119,23 +120,30 @@ export function NeighborhoodChips({ selectedNeighborhood, onSelect }: Neighborho
       .catch(() => setIsLoading(false));
   }, []);
 
-  // Filter neighborhoods by search (including aliases)
+  // Filter neighborhoods by search (including aliases from both hardcoded list and database)
   const filteredNeighborhoods = searchQuery
     ? neighborhoods.filter((n) => {
         const query = searchQuery.toLowerCase();
         // Check official name
         if (n.name.toLowerCase().includes(query)) return true;
-        // Check aliases
+        // Check database alias (e.g., "West Loop" for Near West Side)
+        if (n.alias && n.alias.toLowerCase().includes(query)) return true;
+        // Check hardcoded aliases (sub-neighborhoods like "Pilsen", "Wrigleyville", etc.)
         const aliases = NEIGHBORHOOD_ALIASES[n.slug] || [];
         return aliases.some(alias => alias.includes(query));
       })
     : neighborhoods;
   
   // Get matching alias for display
-  const getMatchingAlias = (slug: string): string | null => {
+  const getMatchingAlias = (neighborhood: Neighborhood): string | null => {
     if (!searchQuery) return null;
-    const aliases = NEIGHBORHOOD_ALIASES[slug] || [];
     const query = searchQuery.toLowerCase();
+    // Check database alias first
+    if (neighborhood.alias && neighborhood.alias.toLowerCase().includes(query)) {
+      return neighborhood.alias;
+    }
+    // Check hardcoded aliases
+    const aliases = NEIGHBORHOOD_ALIASES[neighborhood.slug] || [];
     return aliases.find(alias => alias.includes(query)) || null;
   };
 
@@ -279,7 +287,7 @@ export function NeighborhoodChips({ selectedNeighborhood, onSelect }: Neighborho
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   {filteredNeighborhoods.map((neighborhood) => {
-                    const matchingAlias = getMatchingAlias(neighborhood.slug);
+                    const matchingAlias = getMatchingAlias(neighborhood);
                     return (
                       <button
                         key={neighborhood.id}

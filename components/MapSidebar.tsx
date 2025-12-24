@@ -4,13 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { Search, ArrowUpDown, Loader2, X, MapPin, TrendingUp, Building2, ChevronRight, Clock, AlertTriangle, Calendar } from "lucide-react";
 import { NeighborhoodChips } from "./NeighborhoodChips";
 import { MapRestaurantCard } from "./MapRestaurantCard";
-import { DisplayModeSelector } from "./ScoreStatusDisplay";
 import Link from "next/link";
 
 interface Neighborhood {
   id: string;
   name: string;
   slug: string;
+  alias?: string;
   center_lat?: number;
   center_lng?: number;
   restaurant_count?: number;
@@ -37,6 +37,8 @@ interface Restaurant {
 
 type SortOption = "score" | "name" | "recent";
 
+type ColorMode = "inspection" | "score";
+
 interface MapSidebarProps {
   restaurants: Restaurant[];
   isLoading: boolean;
@@ -49,6 +51,8 @@ interface MapSidebarProps {
   onSearch: (query: string) => void;
   selectedNeighborhood: string | null;
   selectedNeighborhoodData?: Neighborhood | null;
+  colorMode: ColorMode;
+  onColorModeChange: (mode: ColorMode) => void;
 }
 
 export function MapSidebar({
@@ -63,6 +67,8 @@ export function MapSidebar({
   onSearch,
   selectedNeighborhood,
   selectedNeighborhoodData,
+  colorMode,
+  onColorModeChange,
 }: MapSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("score");
@@ -108,9 +114,9 @@ export function MapSidebar({
   }, [selectedRestaurantId]);
 
   const sortOptions: { value: SortOption; label: string }[] = [
-    { value: "score", label: "Highest Score" },
-    { value: "name", label: "Name A-Z" },
-    { value: "recent", label: "Recently Inspected" },
+    { value: "score", label: "Score" },
+    { value: "name", label: "Name" },
+    { value: "recent", label: "Recent" },
   ];
 
   // Sort restaurants
@@ -269,13 +275,18 @@ export function MapSidebar({
           <div className="bg-white rounded-xl shadow-sm border border-emerald-100 overflow-hidden">
             {/* Header */}
             <div className="px-4 py-3 bg-emerald-600 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" />
-                <h3 className="font-semibold">{selectedNeighborhoodData.name}</h3>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <MapPin className="w-4 h-4 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="font-semibold truncate">{selectedNeighborhoodData.name}</h3>
+                  {selectedNeighborhoodData.alias && (
+                    <p className="text-xs text-emerald-200 truncate">also known as {selectedNeighborhoodData.alias}</p>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => onNeighborhoodSelect(null)}
-                className="p-1 hover:bg-emerald-500 rounded-full transition-colors"
+                className="p-1 hover:bg-emerald-500 rounded-full transition-colors flex-shrink-0"
                 aria-label="Clear selection"
               >
                 <X className="w-4 h-4" />
@@ -338,13 +349,45 @@ export function MapSidebar({
         />
       </div>
 
-      {/* Display Mode Selector */}
-      <div className="px-4 py-3 bg-white border-b border-gray-200">
-        <DisplayModeSelector />
+      {/* Color Mode Toggle - separate row with sliding animation */}
+      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <span className="text-xs text-gray-500 font-medium">Color markers by:</span>
+        <div className="relative flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+          {/* Sliding background indicator */}
+          <div 
+            className={`absolute top-1 bottom-1 bg-white rounded-md shadow-sm transition-all duration-300 ease-out`}
+            style={{
+              left: colorMode === "inspection" ? "4px" : "88px",
+              width: colorMode === "inspection" ? "84px" : "120px"
+            }}
+          />
+          <button
+            onClick={() => onColorModeChange("inspection")}
+            className={`relative z-10 px-4 py-2 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap ${
+              colorMode === "inspection"
+                ? "text-emerald-700"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            style={{ width: "84px" }}
+          >
+            Inspection
+          </button>
+          <button
+            onClick={() => onColorModeChange("score")}
+            className={`relative z-10 px-4 py-2 text-xs font-medium rounded-md transition-colors duration-200 text-center whitespace-nowrap ${
+              colorMode === "score"
+                ? "text-emerald-700"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            style={{ width: "120px" }}
+          >
+            CleanPlate Score
+          </button>
+        </div>
       </div>
 
-      {/* Sort & Count */}
-      <div className="px-4 py-3 bg-white border-b border-gray-200 flex items-center justify-between">
+      {/* Count & Sort */}
+      <div className="px-4 py-2.5 bg-white border-b border-gray-200 flex items-center justify-between">
         <span className="text-sm text-gray-600">
           {isLoading ? (
             <span className="flex items-center gap-2">
@@ -435,6 +478,7 @@ export function MapSidebar({
                   isHovered={isHovered}
                   onHover={onRestaurantHover}
                   onClick={() => onRestaurantClick(restaurant)}
+                  colorMode={colorMode}
                 />
               </div>
             );

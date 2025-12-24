@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean-duplicates": "tsx scripts/clean-duplicate-inspections.ts",
+    "check-duplicates": "tsx scripts/check-duplicate-inspections.ts"
   },
   "dependencies": {
     "@heroui/react": "^2.0.0",

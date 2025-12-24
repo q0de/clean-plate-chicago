@@ -62,7 +62,6 @@ export interface Violation {
   violation_description: string;
   violation_comment?: string;
   is_critical: boolean;
-  plain_english?: string;
 }
 
 export interface ApiResponse<T> {

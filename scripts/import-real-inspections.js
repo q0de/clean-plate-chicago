@@ -4,15 +4,78 @@
 require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Catch unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+if (!mapboxToken) {
+  console.warn('Warning: NEXT_PUBLIC_MAPBOX_TOKEN not set. Geocoding will be skipped for addresses without coordinates.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Geocoding cache to avoid duplicate API calls
+const geocodeCache = new Map();
+let geocodeCount = 0;
+let geocodeErrors = 0;
+
+// Geocode an address using Mapbox
+async function geocodeAddress(address, city, state, zip) {
+  if (!mapboxToken) return null;
+  
+  // Build full address
+  const fullAddress = `${address}, ${city || 'Chicago'}, ${state || 'IL'} ${zip || ''}`.trim();
+  
+  // Check cache first
+  if (geocodeCache.has(fullAddress)) {
+    return geocodeCache.get(fullAddress);
+  }
+  
+  try {
+    const encodedAddress = encodeURIComponent(fullAddress);
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&limit=1&country=US`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.features && data.features.length > 0) {
+      const [lng, lat] = data.features[0].center;
+      const result = { latitude: lat, longitude: lng };
+      geocodeCache.set(fullAddress, result);
+      geocodeCount++;
+      return result;
+    }
+    
+    geocodeCache.set(fullAddress, null);
+    return null;
+  } catch (error) {
+    geocodeErrors++;
+    if (geocodeErrors <= 5) {
+      console.error(`Geocoding error for "${fullAddress}":`, error.message);
+    }
+    return null;
+  }
+}
+
+// Rate limiter for geocoding (Mapbox allows 600 requests/minute)
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // Parse violations string into individual violations
 function parseViolations(violationsText) {
@@ -40,7 +103,6 @@ function parseViolations(violationsText) {
         violation_description: description,
         violation_comment: comment,
         is_critical: isCritical,
-        plain_english: generatePlainEnglish(code, description)
       });
     }
   }
@@ -48,52 +110,18 @@ function parseViolations(violationsText) {
   return violations;
 }
 
-// Generate plain English explanation for common violations
-function generatePlainEnglish(code, description) {
-  const explanations = {
-    '1': 'Staff member in charge must be present and knowledgeable about food safety.',
-    '2': 'All food handlers must have valid Chicago food sanitation certificates.',
-    '3': 'Employees must report illnesses that could affect food safety.',
-    '4': 'No bare hand contact with ready-to-eat foods without proper utensils.',
-    '5': 'Procedures to prevent contamination from unclean hands must be followed.',
-    '6': 'Food must come from approved and inspected sources only.',
-    '7': 'Food must be at proper temperatures to prevent bacterial growth.',
-    '8': 'Time and temperature controls must be followed for food safety.',
-    '10': 'Handwashing sinks must be accessible and properly stocked.',
-    '11': 'Food received at the restaurant was not at safe temperatures.',
-    '18': 'Proper procedures for cooling hot foods were not followed.',
-    '32': 'Packaging and containers must be food-grade and clean.',
-    '33': 'Food must be stored properly to prevent contamination.',
-    '34': 'Proper thermometers must be used to monitor food temperatures.',
-    '35': 'Food must be properly protected from potential contamination.',
-    '36': 'Labels must include required allergen information.',
-    '37': 'All food containers must be properly labeled with contents.',
-    '38': 'Insects, rodents, or animals were found in the establishment.',
-    '41': 'Chemicals and toxic substances must be stored safely away from food.',
-    '43': 'Equipment must be in good repair to allow proper cleaning.',
-    '44': 'Utensils must be stored properly to prevent contamination.',
-    '45': 'Single-use items must not be reused.',
-    '47': 'Equipment surfaces must be smooth, cleanable, and in good repair.',
-    '49': 'Non-food contact surfaces must be kept clean.',
-    '51': 'Plumbing must be properly installed without leaks.',
-    '55': 'Facilities must be cleaned and maintained properly.',
-    '56': 'Ventilation systems must be adequate and clean.',
-    '57': 'Bathroom facilities must have self-closing doors.',
-    '60': 'Previous violations from prior inspection were not corrected.'
-  };
-  
-  return explanations[code] || `Violation related to: ${description.toLowerCase()}`;
-}
-
-// Generate slug from name and address
-function generateSlug(name, address) {
-  const combined = `${name} ${address.split(' ').slice(0, 3).join(' ')}`;
-  return combined
+// Generate slug from name and license number (license guarantees uniqueness)
+function generateSlug(name, address, licenseNumber) {
+  // Use name + license number only - simpler and guaranteed unique
+  const namePart = (name || 'unknown')
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
-    .substring(0, 100);
+    .substring(0, 60);
+  
+  // License number is always unique, append it directly
+  return `${namePart}-${licenseNumber}`;
 }
 
 // Parse risk level
@@ -106,19 +134,41 @@ function parseRiskLevel(riskStr) {
 }
 
 // Configuration - adjust these to control how much history to import
-const MONTHS_OF_HISTORY = 6; // Change to 12 for a full year
+const MONTHS_OF_HISTORY = 36; // 3 years of history for good trend/track record data
 const RECORDS_PER_PAGE = 1000;
-const MAX_PAGES = 10; // Safety limit: max 10,000 records
+const MAX_PAGES = 100; // Allow up to 100,000 records (Chicago has ~50k in 3 years)
 
 async function importData() {
   console.log('Fetching inspection data from Chicago Data Portal...');
-  console.log(`Importing ${MONTHS_OF_HISTORY} months of history...`);
   
-  // Calculate date range
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - MONTHS_OF_HISTORY);
-  const startDateStr = startDate.toISOString().split('T')[0];
+  const CLEAR_EXISTING = process.env.CLEAR_DATA === 'true';
+  let startDateStr;
+  
+  // For incremental syncs, only fetch records newer than our latest inspection
+  if (!CLEAR_EXISTING) {
+    const { data: latestInspection } = await supabase
+      .from('inspections')
+      .select('inspection_date')
+      .order('inspection_date', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (latestInspection?.inspection_date) {
+      // Go back 7 days from latest to catch any delayed records
+      const latestDate = new Date(latestInspection.inspection_date);
+      latestDate.setDate(latestDate.getDate() - 7);
+      startDateStr = latestDate.toISOString().split('T')[0];
+      console.log(`Incremental sync: fetching records since ${startDateStr}`);
+    }
+  }
+  
+  // Fall back to full history if clearing or no existing data
+  if (!startDateStr) {
+    console.log(`Importing ${MONTHS_OF_HISTORY} months of history...`);
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - MONTHS_OF_HISTORY);
+    startDateStr = startDate.toISOString().split('T')[0];
+  }
   
   console.log(`Date range: ${startDateStr} to present`);
   
@@ -171,7 +221,7 @@ async function importData() {
         zip: record.zip || null,
         latitude: record.latitude ? parseFloat(record.latitude) : null,
         longitude: record.longitude ? parseFloat(record.longitude) : null,
-        slug: generateSlug(record.dba_name, record.address || ''),
+        slug: generateSlug(record.dba_name, record.address || '', record.license_),
         inspections: []
       });
     }
@@ -189,9 +239,7 @@ async function importData() {
   
   console.log(`Found ${establishmentMap.size} unique establishments`);
   
-  // Option to clear existing data (set to false for incremental updates)
-  const CLEAR_EXISTING = process.env.CLEAR_DATA === 'true';
-  
+  // Clear existing data if requested
   if (CLEAR_EXISTING) {
     console.log('Clearing existing data...');
     await supabase.from('violations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -205,11 +253,35 @@ async function importData() {
   let inspectionCount = 0;
   let violationCount = 0;
   
+  let geocodedCount = 0;
+  let skippedNoCoords = 0;
+  const totalEstablishments = establishmentMap.size;
+  let processed = 0;
+  
   for (const [licenseNum, est] of establishmentMap) {
-    // Skip if no coordinates (needed for map)
+    processed++;
+    // Log progress every 100 establishments
+    if (processed % 100 === 0) {
+      console.log(`Progress: ${processed}/${totalEstablishments} (${Math.round(processed/totalEstablishments*100)}%) - Imported: ${establishmentCount} establishments, ${inspectionCount} inspections`);
+    }
+    // Geocode if no coordinates
     if (!est.latitude || !est.longitude) {
-      console.log(`Skipping ${est.dba_name} - no coordinates`);
-      continue;
+      const geocoded = await geocodeAddress(est.address, est.city, est.state, est.zip);
+      if (geocoded) {
+        est.latitude = geocoded.latitude;
+        est.longitude = geocoded.longitude;
+        geocodedCount++;
+        // Rate limit: small delay every 10 geocodes to stay under Mapbox limits
+        if (geocodedCount % 10 === 0) {
+          await sleep(100);
+        }
+      } else {
+        skippedNoCoords++;
+        if (skippedNoCoords <= 10) {
+          console.log(`Skipping ${est.dba_name} - could not geocode address: ${est.address}`);
+        }
+        continue;
+      }
     }
     
     // Get latest inspection info
@@ -272,11 +344,16 @@ async function importData() {
       const violationCountNum = insp.violations.length;
       const criticalCountNum = insp.violations.filter(v => v.is_critical).length;
       
+      // Use a consistent inspection_id format: just the numeric ID from Chicago API
+      // This prevents duplicates from different ID formats (e.g., "2627108" vs "2627108-2024-11-14T00:00:00.000")
+      const normalizedInspectionId = String(insp.inspection_id).split('-')[0].replace(/\D/g, '') || insp.inspection_id;
+      
+      // Try to upsert the inspection
       const { data: inspData, error: inspError } = await supabase
         .from('inspections')
         .upsert({
           establishment_id: estData.id,
-          inspection_id: insp.inspection_id,
+          inspection_id: normalizedInspectionId,
           inspection_date: insp.inspection_date,
           inspection_type: insp.inspection_type,
           results: insp.results,
@@ -285,34 +362,44 @@ async function importData() {
           critical_count: criticalCountNum
         }, {
           onConflict: 'inspection_id',
-          ignoreDuplicates: true // Skip if inspection already exists
+          ignoreDuplicates: false // Update if exists (to ensure we have the ID)
         })
         .select()
-        .single();
+        .maybeSingle();
       
-      if (inspError) {
-        // Skip duplicate key errors silently
-        if (!inspError.message.includes('duplicate') && !inspError.message.includes('0 rows')) {
+      // If upsert failed or returned no data, try to fetch existing inspection
+      let inspectionId = inspData?.id;
+      if (!inspectionId) {
+        const { data: existingInsp } = await supabase
+          .from('inspections')
+          .select('id')
+          .eq('inspection_id', normalizedInspectionId)
+          .single();
+        inspectionId = existingInsp?.id;
+      }
+      
+      if (!inspectionId) {
+        if (inspError && !inspError.message.includes('duplicate')) {
           console.error(`Error inserting inspection:`, inspError.message);
         }
         continue;
       }
       
-      if (!inspData) continue; // Skipped due to duplicate
-      
       inspectionCount++;
       
-      // Insert violations
+      // Insert violations (use upsert to prevent duplicates)
       for (const viol of insp.violations) {
         const { error: violError } = await supabase
           .from('violations')
-          .insert({
-            inspection_id: inspData.id,
+          .upsert({
+            inspection_id: inspectionId,
             violation_code: viol.violation_code,
             violation_description: viol.violation_description,
             violation_comment: viol.violation_comment,
             is_critical: viol.is_critical,
-            plain_english: viol.plain_english
+          }, {
+            onConflict: 'inspection_id,violation_code',
+            ignoreDuplicates: true
           });
         
         if (!violError) {
@@ -326,6 +413,8 @@ async function importData() {
   console.log(`Establishments: ${establishmentCount}`);
   console.log(`Inspections: ${inspectionCount}`);
   console.log(`Violations: ${violationCount}`);
+  console.log(`Geocoded addresses: ${geocodedCount}`);
+  console.log(`Skipped (no coordinates): ${skippedNoCoords}`);
   
   // Assign neighborhoods to new establishments
   console.log('\nAssigning neighborhoods to establishments...');

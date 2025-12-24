@@ -1,8 +1,11 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { MapPin, Building2, ChevronRight, Calendar, AlertTriangle, Clock } from "lucide-react";
 import { ScoreStatusDisplayCompact } from "./ScoreStatusDisplay";
 import Link from "next/link";
+
+type ColorMode = "inspection" | "score";
 
 interface MapRestaurantCardProps {
   restaurant: {
@@ -27,6 +30,7 @@ interface MapRestaurantCardProps {
   isHovered?: boolean;
   onHover?: (id: string | null) => void;
   onClick?: () => void;
+  colorMode?: ColorMode;
 }
 
 function formatDate(dateStr: string): string {
@@ -66,35 +70,146 @@ function getFacilityBadge(facilityType?: string) {
   return facilityBadges[key] || facilityBadges.default;
 }
 
+// Generate template summary (same logic as API)
+function generateInspectionSummary(
+  result: string,
+  inspectionType: string | null,
+  violationCount: number,
+  criticalCount: number,
+  themes: string[]
+): string {
+  const isPass = result.toLowerCase().includes("pass") && !result.toLowerCase().includes("fail");
+  const isConditional = result.toLowerCase().includes("condition");
+  
+  let summary = "";
+  
+  if (isPass && violationCount === 0) {
+    summary = "Clean inspection with no issues found.";
+  } else if (isPass && criticalCount === 0 && violationCount <= 2) {
+    summary = `Minor items noted but all standards met.`;
+  } else if (isPass) {
+    if (themes.length > 0) {
+      summary = `Passed with notes on ${themes.slice(0, 2).map(t => t.split(" ")[1] || t).join(" & ")}.`;
+    } else {
+      summary = `${violationCount} items flagged but passed inspection.`;
+    }
+  } else if (isConditional) {
+    if (criticalCount > 0) {
+      summary = `Needs follow-up on ${criticalCount} critical item${criticalCount > 1 ? "s" : ""}`;
+      if (themes.length > 0) summary += ` (${themes[0]})`;
+      summary += ".";
+    } else {
+      summary = `Conditional: ${violationCount} issues require attention.`;
+    }
+  } else {
+    // Failed
+    if (themes.length > 0) {
+      summary = `Failed due to ${themes.slice(0, 2).map(t => t.split(" ")[1] || t).join(", ")} concerns.`;
+    } else {
+      summary = `Did not pass: ${violationCount} violation${violationCount > 1 ? "s" : ""} found.`;
+    }
+  }
+  
+  // Add inspection type context
+  if (inspectionType) {
+    const type = inspectionType.toLowerCase();
+    if (type.includes("complaint")) {
+      summary += " (Complaint-driven inspection)";
+    } else if (type.includes("re-inspection")) {
+      summary += " (Follow-up visit)";
+    }
+  }
+  
+  return summary;
+}
+
 export function MapRestaurantCard({
   restaurant,
   isSelected = false,
   isHovered = false,
   onHover,
   onClick,
+  colorMode = "inspection",
 }: MapRestaurantCardProps) {
-  // Determine status based on result AND score
-  // Determine status based on inspection result first, then score
-  const getStatus = () => {
+  // State for summary display
+  const [displaySummary, setDisplaySummary] = useState<string | null>(restaurant.ai_summary || null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  
+  // Generate template summary for fallback
+  const templateSummary = generateInspectionSummary(
+    restaurant.latest_result,
+    restaurant.inspection_type || null,
+    restaurant.violation_count || 0,
+    restaurant.critical_count || 0,
+    restaurant.violation_themes || []
+  );
+  
+  // When card is expanded, fetch AI summary if inspection has been updated
+  useEffect(() => {
+    if (!isSelected || !restaurant.slug) return;
+    
+    // If we already have an AI summary from props, use it (it's already validated by API)
+    if (restaurant.ai_summary) {
+      setDisplaySummary(restaurant.ai_summary);
+      return;
+    }
+    
+    // Otherwise, fetch from summary endpoint (will generate if inspection updated)
+    setIsLoadingSummary(true);
+    fetch(`/api/establishments/${restaurant.slug}/summary`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.summary) {
+          setDisplaySummary(data.summary);
+        } else {
+          // Fallback to template if no summary returned
+          setDisplaySummary(templateSummary);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to fetch AI summary:", error);
+        setDisplaySummary(templateSummary);
+      })
+      .finally(() => {
+        setIsLoadingSummary(false);
+      });
+  }, [isSelected, restaurant.slug, restaurant.ai_summary, templateSummary]);
+  
+  // Determine status based on colorMode - includes exceptional tier for 90+ scores and closed for out of business
+  const getStatus = (): "closed" | "exceptional" | "pass" | "conditional" | "fail" => {
+    // Always check for out of business first
     const result = restaurant.latest_result.toLowerCase();
-    if (result.includes("fail")) return "fail";
-    if (result.includes("condition")) return "conditional";
-    // Only show as conditional if score is very low (< 60) despite passing
-    if (restaurant.cleanplate_score < 60) return "conditional";
-    return "pass";
+    if (result.includes("out of business")) return "closed";
+    
+    if (colorMode === "score") {
+      // Color by CleanPlate Score - 4 tiers
+      if (restaurant.cleanplate_score >= 90) return "exceptional";
+      if (restaurant.cleanplate_score >= 80) return "pass";
+      if (restaurant.cleanplate_score >= 60) return "conditional";
+      return "fail";
+    } else {
+      // Color by Inspection Result - no exceptional tier
+      if (result.includes("fail")) return "fail";
+      if (result.includes("condition")) return "conditional";
+      return "pass";
+    }
   };
   const status = getStatus();
 
-  const statusColors = {
-    pass: "border-emerald-500 bg-emerald-50",
-    conditional: "border-amber-500 bg-amber-50",
-    fail: "border-red-500 bg-red-50",
+  const statusColors: Record<string, string> = {
+    closed: "border-gray-300 bg-gray-50",
+    exceptional: "border-teal-300 bg-teal-50",
+    pass: "border-emerald-300 bg-emerald-50",
+    conditional: "border-amber-300 bg-amber-50",
+    fail: "border-red-300 bg-red-50",
   };
 
-  const buttonColors = {
-    pass: "bg-emerald-600 hover:bg-emerald-700",
-    conditional: "bg-amber-500 hover:bg-amber-600",
-    fail: "bg-red-500 hover:bg-red-600",
+  const buttonColors: Record<string, string> = {
+    closed: "bg-gray-400 hover:bg-gray-500",
+    exceptional: "bg-teal-400 hover:bg-teal-500",
+    pass: "bg-emerald-400 hover:bg-emerald-500",
+    conditional: "bg-amber-300 hover:bg-amber-400",
+    fail: "bg-red-400 hover:bg-red-500",
   };
 
   return (
@@ -115,13 +230,12 @@ export function MapRestaurantCard({
         className={`p-3 ${!isSelected ? 'cursor-pointer' : ''}`}
       >
         <div className="flex flex-col gap-2">
-          {/* Score + Status Display (respects display mode) */}
+          {/* Score + Status Display */}
           <div className="flex items-center justify-between gap-2">
             <ScoreStatusDisplayCompact 
               score={restaurant.cleanplate_score} 
               latestResult={restaurant.latest_result}
-              violationCount={restaurant.violation_count}
-              criticalCount={restaurant.critical_count}
+              latestInspectionDate={restaurant.latest_inspection_date}
             />
             {/* Facility Badge */}
             {(() => {
@@ -197,15 +311,20 @@ export function MapRestaurantCard({
 
           {/* AI Summary & Violation Themes */}
           <div className="px-3 py-2.5 bg-gradient-to-r from-gray-50 to-white border-t border-gray-100 space-y-2">
-            {/* AI Summary */}
-            {restaurant.ai_summary ? (
-              <p className="text-xs text-gray-700 leading-relaxed">
-                {restaurant.ai_summary}
-              </p>
+            {/* Summary Display with fade effect */}
+            {isLoadingSummary ? (
+              <div className="space-y-2">
+                <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4" />
+              </div>
             ) : (
-              <p className="text-xs text-gray-500 italic">
-                No detailed summary available
-              </p>
+              <div className="relative">
+                <p className="text-xs text-gray-700 leading-relaxed line-clamp-3">
+                  {displaySummary || templateSummary}
+                </p>
+                {/* Fade overlay to create mystery */}
+                <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none" />
+              </div>
             )}
             
             {/* Violation Theme Pills */}
@@ -233,14 +352,29 @@ export function MapRestaurantCard({
 
           {/* View Details Button */}
           <div className="px-3 pb-3">
-            <Link
-              href={`/restaurant/${restaurant.slug}`}
-              onClick={(e) => e.stopPropagation()}
-              className={`flex items-center justify-center gap-2 w-full py-2.5 text-white text-sm font-medium rounded-lg transition-colors ${buttonColors[status]}`}
-            >
-              View Full Details
-              <ChevronRight className="w-4 h-4" />
-            </Link>
+            {restaurant.slug && restaurant.slug.trim() ? (
+              <Link
+                href={`/restaurant/${restaurant.slug.trim()}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
+                className={`flex items-center justify-center gap-2 w-full py-2.5 text-white text-sm font-medium rounded-lg transition-colors ${buttonColors[status]}`}
+              >
+                View Full Details
+                <ChevronRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.error("Cannot navigate: restaurant missing slug", restaurant);
+                }}
+                disabled
+                className="flex items-center justify-center gap-2 w-full py-2.5 text-sm font-medium rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed"
+              >
+                Details unavailable
+              </button>
+            )}
           </div>
         </div>
       )}

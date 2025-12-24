@@ -3,7 +3,6 @@
 interface ScoreDisplayProps {
   score: number;
   size?: "sm" | "md" | "lg";
-  showLabel?: boolean;
 }
 
 const sizeConfig = {
@@ -13,12 +12,13 @@ const sizeConfig = {
 };
 
 function getScoreColor(score: number): string {
+  if (score >= 90) return "#14b8a6"; // teal-500 (exceptional green-blue)
   if (score >= 80) return "#10b981"; // emerald-500
   if (score >= 60) return "#f59e0b"; // amber-500
   return "#ef4444"; // red-500
 }
 
-export function ScoreDisplay({ score, size = "md", showLabel = false }: ScoreDisplayProps) {
+export function ScoreDisplay({ score, size = "md" }: ScoreDisplayProps) {
   const config = sizeConfig[size];
   const radius = (config.width - config.strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -26,7 +26,7 @@ export function ScoreDisplay({ score, size = "md", showLabel = false }: ScoreDis
   const color = getScoreColor(score);
   
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center cursor-help" title="CleanPlate Score">
       <div className="relative" style={{ width: config.width, height: config.width }}>
         <svg
           width={config.width}
@@ -69,10 +69,6 @@ export function ScoreDisplay({ score, size = "md", showLabel = false }: ScoreDis
           {score}
         </div>
       </div>
-      
-      {showLabel && (
-        <span className="text-xs text-gray-500 mt-1 font-medium">CleanPlate Score</span>
-      )}
     </div>
   );
 }

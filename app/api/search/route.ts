@@ -31,15 +31,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      data: data || [],
-      meta: {
-        total: data?.length || 0,
-        limit,
-        offset,
-        has_more: (data?.length || 0) >= limit,
+    return NextResponse.json(
+      {
+        data: data || [],
+        meta: {
+          total: data?.length || 0,
+          limit,
+          offset,
+          has_more: (data?.length || 0) >= limit,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Search route error:", error);
     return NextResponse.json(

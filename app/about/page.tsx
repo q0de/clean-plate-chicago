@@ -53,35 +53,89 @@ export default function AboutPage() {
             Our proprietary CleanPlate Score (0-100) combines multiple factors to give you a comprehensive view of a restaurant&apos;s food safety:
           </p>
           <ul className="list-disc list-inside space-y-2 text-default-700 mb-4">
-            <li><strong>Result (40%):</strong> Pass, Conditional, or Fail status</li>
-            <li><strong>Trend (20%):</strong> Improvement or decline over recent inspections</li>
-            <li><strong>Violations (20%):</strong> Number and severity of violations</li>
-            <li><strong>Recency (10%):</strong> How recent the last inspection was</li>
-            <li><strong>Inspection Category (10%):</strong> Establishment inspection category (Level 1-3)</li>
+            <li><strong>Recent Inspections (35%):</strong> Pass, Conditional, or Fail status, weighted by recency</li>
+            <li><strong>Violation Severity (25%):</strong> Number and seriousness of violations found</li>
+            <li><strong>Trend (15%):</strong> Is the restaurant improving or declining over time?</li>
+            <li><strong>Track Record (15%):</strong> History of problems over the past 2-5 years</li>
+            <li><strong>Data Freshness (10%):</strong> How recently the establishment was inspected</li>
           </ul>
+          <p className="text-default-700 mb-4">
+            Our algorithm is <strong>risk-adjusted</strong> — meaning we account for the fact that different types of establishments have different inspection schedules. A coffee shop (inspected every 2 years) isn&apos;t penalized the same as a restaurant (inspected every 6 months) for having an older inspection.
+          </p>
           <p className="text-default-700">
             Scores are updated automatically when new inspection data is available.
           </p>
         </section>
 
         <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Latest Inspection Badge</h2>
+          <p className="text-default-700 mb-4">
+            In addition to the CleanPlate Score, we show the official result from the most recent inspection. This comes directly from Chicago&apos;s health department data:
+          </p>
+          <div className="space-y-2 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Pass</span>
+              <span className="text-default-700">Establishment met all requirements</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Conditional</span>
+              <span className="text-default-700">Conditional pass - follow-up required to address issues</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Fail</span>
+              <span className="text-default-700">Did not meet requirements; re-inspection required</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-8">
           <h2 className="text-xl font-semibold mb-4">Score Ranges</h2>
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded-full bg-success"></div>
-              <span className="text-default-700"><strong>85-100:</strong> Excellent</span>
+              <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
+              <span className="text-default-700"><strong>90-100:</strong> Excellent — Consistently clean, safe choice</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded-full bg-success"></div>
-              <span className="text-default-700"><strong>70-84:</strong> Good</span>
+              <div className="w-4 h-4 rounded-full bg-lime-500"></div>
+              <span className="text-default-700"><strong>70-89:</strong> Good — Generally clean, minor issues</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded-full bg-warning"></div>
-              <span className="text-default-700"><strong>50-69:</strong> Fair</span>
+              <div className="w-4 h-4 rounded-full bg-amber-500"></div>
+              <span className="text-default-700"><strong>50-69:</strong> Fair — Some concerns, check details</span>
             </div>
             <div className="flex items-center gap-3">
-              <div className="w-4 h-4 rounded-full bg-danger"></div>
-              <span className="text-default-700"><strong>0-49:</strong> Poor</span>
+              <div className="w-4 h-4 rounded-full bg-red-500"></div>
+              <span className="text-default-700"><strong>0-49:</strong> Poor — Significant issues, proceed with caution</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold mb-4">Frequently Asked Questions</h2>
+          <div className="space-y-4">
+            <div>
+              <h3 className="font-medium text-default-800 mb-1">Why is my favorite restaurant&apos;s score lower than I expected?</h3>
+              <p className="text-sm text-default-600">
+                The score reflects health inspection data, not food quality or service. A beloved neighborhood spot might have had recent violations that affected their score.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-medium text-default-800 mb-1">How often are scores updated?</h3>
+              <p className="text-sm text-default-600">
+                We sync with Chicago&apos;s health department data daily. Scores update within 24 hours of new inspection results being published.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-medium text-default-800 mb-1">Can a restaurant improve their score quickly?</h3>
+              <p className="text-sm text-default-600">
+                Recent good inspections help immediately, but track record penalties from past problems take 2-5 years to fully fade. This prevents gaming the system.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-medium text-default-800 mb-1">Why does a restaurant show &quot;Limited Data&quot;?</h3>
+              <p className="text-sm text-default-600">
+                Some establishments are inspected infrequently. Until we have enough inspection history, we blend their score with similar restaurants in their category.
+              </p>
             </div>
           </div>
         </section>
@@ -105,4 +159,3 @@ export default function AboutPage() {
     </div>
   );
 }
-

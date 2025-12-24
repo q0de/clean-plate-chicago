@@ -22,6 +22,13 @@ interface ChicagoInspection {
   violations?: string;
 }
 
+interface InspectionRecord {
+  results: string;
+  inspection_date: string;
+  violation_count: number;
+  critical_count: number;
+}
+
 Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -35,6 +42,30 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get the date of the most recent inspection in our database
+    // Only fetch new inspections since then (with 1 day buffer for safety)
+    const { data: lastInspection } = await supabase
+      .from("inspections")
+      .select("inspection_date")
+      .order("inspection_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    // Default to 7 days ago if no inspections exist, otherwise use last inspection date minus 1 day buffer
+    const defaultLookback = new Date();
+    defaultLookback.setDate(defaultLookback.getDate() - 7);
+    
+    let sinceDateStr: string;
+    if (lastInspection?.inspection_date) {
+      const lastDate = new Date(lastInspection.inspection_date);
+      lastDate.setDate(lastDate.getDate() - 1); // 1 day buffer to catch any late entries
+      sinceDateStr = lastDate.toISOString().split("T")[0];
+    } else {
+      sinceDateStr = defaultLookback.toISOString().split("T")[0];
+    }
+
+    console.log(`Syncing inspections since: ${sinceDateStr}`);
 
     // Create sync log entry
     const { data: logEntry, error: logError } = await supabase
@@ -64,7 +95,8 @@ Deno.serve(async (req) => {
 
     while (hasMore) {
       try {
-        const url = `${CHICAGO_API}?$limit=${BATCH_SIZE}&$offset=${offset}&$order=inspection_date DESC`;
+        // Only fetch inspections since the last sync date
+        const url = `${CHICAGO_API}?$limit=${BATCH_SIZE}&$offset=${offset}&$order=inspection_date DESC&$where=inspection_date >= '${sinceDateStr}'`;
         const response = await fetch(url);
         
         if (!response.ok) {
@@ -79,6 +111,7 @@ Deno.serve(async (req) => {
         }
 
         totalFetched += data.length;
+        console.log(`Fetched ${data.length} inspections (total: ${totalFetched})`);
 
         // Process each inspection
         for (const inspection of data) {
@@ -227,43 +260,52 @@ async function processInspection(
       .eq("id", establishmentId);
   }
 
-  // Check if inspection already exists
-  const { data: existingInspection } = await supabase
-    .from("inspections")
-    .select("id")
-    .eq("inspection_id", inspection.inspection_id)
-    .single();
-
-  if (existingInspection) {
-    // Skip if already exists
-    return;
-  }
-
   // Parse violations
   const violations = parseViolations(inspection.violations || "");
   const criticalCount = violations.filter((v) => v.is_critical).length;
 
-  // Create inspection
+  // Normalize inspection_id to just the numeric ID from Chicago API
+  // This prevents duplicates from different ID formats
+  const normalizedInspectionId = String(inspection.inspection_id).split('-')[0].replace(/\D/g, '') || inspection.inspection_id;
+
+  // Use upsert to handle duplicates atomically - this prevents race conditions
+  // The unique constraint on inspection_id will prevent actual duplicates at the database level
+  // This approach is safer than check-then-insert which can have race conditions
   const { data: newInspection, error: inspError } = await supabase
     .from("inspections")
-    .insert({
+    .upsert({
       establishment_id: establishmentId,
-      inspection_id: inspection.inspection_id,
+      inspection_id: normalizedInspectionId,
       inspection_date: inspection.inspection_date.split("T")[0],
       inspection_type: inspection.inspection_type,
       results: inspection.results,
       raw_violations: inspection.violations || null,
       violation_count: violations.length,
       critical_count: criticalCount,
+    }, {
+      onConflict: 'inspection_id',
+      ignoreDuplicates: false // Update if exists (keeps data fresh)
     })
     .select()
-    .single();
+    .maybeSingle(); // Use maybeSingle() to handle cases where no row is returned
 
   if (inspError) {
-    throw new Error(`Failed to create inspection: ${inspError.message}`);
+    // If it's a duplicate key error, that's fine - just skip
+    // This shouldn't happen with upsert, but handle it just in case
+    if (inspError.code === '23505' || inspError.message?.includes('duplicate') || inspError.message?.includes('unique')) {
+      // Inspection already exists, skip it
+      return;
+    }
+    throw new Error(`Failed to create/update inspection: ${inspError.message}`);
   }
 
-  // Create violations
+  // If no inspection was returned (shouldn't happen with upsert, but handle it)
+  if (!newInspection) {
+    // This means the inspection already exists and wasn't updated, skip it
+    return;
+  }
+
+  // Create violations (use upsert to handle duplicates)
   if (violations.length > 0) {
     const violationRecords = violations.map((v) => ({
       inspection_id: newInspection.id,
@@ -271,12 +313,14 @@ async function processInspection(
       violation_description: v.description,
       violation_comment: v.comment || null,
       is_critical: v.is_critical,
-      plain_english: v.plain_english || null,
     }));
 
     const { error: violError } = await supabase
       .from("violations")
-      .insert(violationRecords);
+      .upsert(violationRecords, {
+        onConflict: 'inspection_id,violation_code',
+        ignoreDuplicates: true  // Skip if already exists
+      });
 
     if (violError) {
       console.error("Failed to create violations:", violError);
@@ -284,7 +328,7 @@ async function processInspection(
   }
 
   // Recalculate CleanPlate score for establishment
-  await recalculateScore(establishmentId, supabase);
+  await recalculateScore(establishmentId, riskLevel || 2, supabase);
 }
 
 function parseViolations(violationsString: string): Array<{
@@ -292,7 +336,6 @@ function parseViolations(violationsString: string): Array<{
   description: string;
   comment?: string;
   is_critical: boolean;
-  plain_english?: string;
 }> {
   if (!violationsString) return [];
 
@@ -331,153 +374,182 @@ function createSlug(name: string, license: string): string {
   return `${base}-${license.slice(-4)}`;
 }
 
+// ============================================================================
+// CleanPlate Score Calculator v2.0
+// Algorithm: Score = (Result × 0.35) + (Violations × 0.25) + (Trend × 0.15) + (TrackRecord × 0.15) + (Recency × 0.10)
+// ============================================================================
+
 /**
- * Recalculate CleanPlate Score for an establishment based on recent inspections
+ * Get risk-adjusted half-life in months for time decay
  */
-async function recalculateScore(establishmentId: string, supabase: any) {
-  try {
-    // Fetch establishment with risk level
-    const { data: establishment } = await supabase
-      .from("establishments")
-      .select("risk_level")
-      .eq("id", establishmentId)
-      .single();
+function getRiskAdjustedHalfLife(riskLevel: number): number {
+  switch (riskLevel) {
+    case 1: return 6;   // Risk 1: inspected every 6 months
+    case 2: return 12;  // Risk 2: inspected every 12 months
+    case 3: return 24;  // Risk 3: inspected every 24 months
+    default: return 12;
+  }
+}
 
-    if (!establishment) return;
+/**
+ * Get expected inspection interval in days for a risk level
+ */
+function getExpectedIntervalDays(riskLevel: number): number {
+  switch (riskLevel) {
+    case 1: return 180;  // 6 months
+    case 2: return 365;  // 12 months
+    case 3: return 730;  // 24 months
+    default: return 365;
+  }
+}
 
-    // Fetch recent inspections (last 5 for trend calculation)
-    const { data: inspections } = await supabase
-      .from("inspections")
-      .select("results, inspection_date, violation_count, critical_count")
-      .eq("establishment_id", establishmentId)
-      .order("inspection_date", { ascending: false })
-      .limit(5);
+/**
+ * Calculate time decay weight for an inspection
+ */
+function calculateTimeWeight(monthsSinceInspection: number, riskLevel: number): number {
+  const halfLife = getRiskAdjustedHalfLife(riskLevel);
+  const lambda = 0.693 / halfLife;
+  return Math.exp(-lambda * monthsSinceInspection);
+}
 
-    if (!inspections || inspections.length === 0) return;
+/**
+ * Calculate risk-adjusted recency score
+ */
+function calculateRecencyScore(daysSinceInspection: number, riskLevel: number): number {
+  const expectedInterval = getExpectedIntervalDays(riskLevel);
+  const ratio = daysSinceInspection / expectedInterval;
+  
+  if (ratio < 0.5) return 100;   // Very recent
+  if (ratio <= 1.0) return 85;   // On schedule
+  if (ratio <= 1.25) return 60;  // Slightly overdue
+  return 40;                      // Overdue
+}
 
-    const latest = inspections[0];
-    const riskLevel = establishment.risk_level || 2;
+/**
+ * Get outcome points for an inspection result
+ */
+function getOutcomePoints(results: string): number {
+  const resultLower = results.toLowerCase();
+  if (resultLower.includes("pass") && !resultLower.includes("condition") && !resultLower.includes("fail")) {
+    return 100;
+  } else if (resultLower.includes("condition")) {
+    return 70;
+  } else if (resultLower.includes("fail")) {
+    return 30;
+  }
+  return 50;
+}
 
-    // Calculate score components
-    const score = calculateCleanPlateScore(latest, inspections, riskLevel);
+/**
+ * Calculate months since a given date
+ */
+function getMonthsSinceDate(dateStr: string): number {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const months = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+  const dayDiff = now.getDate() - date.getDate();
+  return months + (dayDiff / 30);
+}
 
-    // Calculate pass streak
-    let passStreak = 0;
-    for (const insp of inspections) {
-      const result = insp.results.toLowerCase();
-      if (result.includes("pass") && !result.includes("fail")) {
-        passStreak++;
-      } else {
-        break;
-      }
+/**
+ * Calculate days since a given date
+ */
+function getDaysSinceInspection(dateStr: string): number {
+  const inspectionDate = new Date(dateStr);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - inspectionDate.getTime());
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Calculate the Result component (35%) - Time-weighted average of outcomes
+ */
+function calculateResultScore(inspections: InspectionRecord[], riskLevel: number): number {
+  if (inspections.length === 0) return 50;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const insp of inspections) {
+    const monthsSince = getMonthsSinceDate(insp.inspection_date);
+    const weight = calculateTimeWeight(monthsSince, riskLevel);
+    const points = getOutcomePoints(insp.results);
+    
+    weightedSum += points * weight;
+    totalWeight += weight;
+  }
+
+  return totalWeight > 0 ? weightedSum / totalWeight : 50;
+}
+
+/**
+ * Calculate the Violations component (25%)
+ */
+function calculateViolationsScore(latest: InspectionRecord): number {
+  const criticalPenalty = latest.critical_count * 15;
+  const nonCriticalPenalty = (latest.violation_count - latest.critical_count) * 5;
+  return Math.max(0, 100 - criticalPenalty - nonCriticalPenalty);
+}
+
+/**
+ * Calculate the Trend component (15%)
+ */
+function calculateTrendScore(inspections: InspectionRecord[]): number {
+  if (inspections.length < 3) return 60; // Default to neutral
+
+  const scores = inspections.slice(0, 4).map(insp => getOutcomePoints(insp.results));
+  
+  if (scores.length < 3) return 60;
+
+  const recentAvg = (scores[0] + scores[1]) / 2;
+  const previousAvg = scores.length >= 4 
+    ? (scores[2] + scores[3]) / 2 
+    : scores[2];
+  
+  const trendDelta = recentAvg - previousAvg;
+
+  if (trendDelta >= 30) return 100;       // Strong improvement
+  if (trendDelta >= 15) return 85;        // Moderate improvement
+  if (trendDelta >= 1) return 70;         // Slight improvement
+  if (trendDelta >= -1) return 60;        // Stable
+  if (trendDelta >= -14) return 45;       // Slight decline
+  if (trendDelta >= -29) return 30;       // Moderate decline
+  return 15;                               // Strong decline
+}
+
+/**
+ * Calculate the Track Record component (15%)
+ */
+function calculateTrackRecordScore(inspections: InspectionRecord[]): number {
+  let penaltyPoints = 0;
+  const now = new Date();
+
+  for (const insp of inspections) {
+    const inspDate = new Date(insp.inspection_date);
+    const monthsAgo = (now.getFullYear() - inspDate.getFullYear()) * 12 + 
+                      (now.getMonth() - inspDate.getMonth());
+    
+    const resultLower = insp.results.toLowerCase();
+
+    // Fail result: +2 penalty, 36 month lookback
+    if (resultLower.includes("fail") && monthsAgo <= 36) {
+      penaltyPoints += 2;
     }
 
-    // Update establishment with new score
-    await supabase
-      .from("establishments")
-      .update({
-        cleanplate_score: score,
-        pass_streak: passStreak,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", establishmentId);
-
-    console.log(`Updated score for ${establishmentId}: ${score}`);
-  } catch (error) {
-    console.error(`Failed to recalculate score for ${establishmentId}:`, error);
+    // Critical violations: +3 penalty per inspection with criticals, 36 month lookback
+    if (insp.critical_count > 0 && monthsAgo <= 36) {
+      penaltyPoints += 3;
+    }
   }
+
+  const cappedPenalty = Math.min(penaltyPoints, 20);
+  return Math.max(0, 100 - (cappedPenalty * 5));
 }
 
 /**
- * Calculate CleanPlate Score based on PRD formula:
- * Score = (Result × 0.40) + (Trend × 0.20) + (Violations × 0.20) + (Recency × 0.10) + (Risk × 0.10)
+ * Calculate pass streak
  */
-function calculateCleanPlateScore(
-  latest: { results: string; inspection_date: string; violation_count: number; critical_count: number },
-  inspections: Array<{ results: string; inspection_date: string; violation_count: number; critical_count: number }>,
-  riskLevel: number
-): number {
-  // Result component (40%)
-  let resultScore = 50;
-  const resultLower = latest.results.toLowerCase();
-  if (resultLower.includes("pass") && !resultLower.includes("condition") && !resultLower.includes("fail")) {
-    resultScore = 100;
-  } else if (resultLower.includes("condition")) {
-    resultScore = 70;
-  } else if (resultLower.includes("fail")) {
-    resultScore = 30;
-  }
-
-  // Trend component (20%)
-  let trendScore = 0;
-  if (inspections.length >= 3) {
-    const last3 = inspections.slice(0, 3);
-    const scores = last3.map((insp) => {
-      const r = insp.results.toLowerCase();
-      if (r.includes("pass") && !r.includes("condition") && !r.includes("fail")) return 100;
-      if (r.includes("condition")) return 70;
-      if (r.includes("fail")) return 30;
-      return 50;
-    });
-
-    const first = scores[2];
-    const middle = scores[1];
-    const last = scores[0];
-
-    if (last > middle && middle > first) trendScore = 10; // improving
-    else if (last < middle && middle < first) trendScore = -10; // declining
-  }
-
-  // Violations component (20%)
-  const violationsScore = Math.max(
-    0,
-    100 - (latest.critical_count * 15) - ((latest.violation_count - latest.critical_count) * 5)
-  );
-
-  // Recency component (10%)
-  const daysSince = getDaysSinceInspection(latest.inspection_date);
-  let recencyScore = 20;
-  if (daysSince < 180) recencyScore = 100;
-  else if (daysSince < 365) recencyScore = 80;
-  else if (daysSince < 540) recencyScore = 50;
-
-  // Risk component (10%) - lower risk level = better score
-  let riskScore = 80;
-  if (riskLevel === 3) riskScore = 100;
-  else if (riskLevel === 2) riskScore = 80;
-  else if (riskLevel === 1) riskScore = 60;
-
-  // Calculate base score
-  let score =
-    resultScore * 0.40 +
-    trendScore * 0.20 +
-    violationsScore * 0.20 +
-    recencyScore * 0.10 +
-    riskScore * 0.10;
-
-  // Apply modifiers
-  const passStreak = getPassStreak(inspections);
-  if (passStreak >= 3) {
-    score += 5;
-  }
-
-  if (daysSince > 540) {
-    score -= 20;
-  }
-
-  const hasRecentFailure = inspections.some(
-    (insp) =>
-      insp.results.toLowerCase().includes("fail") &&
-      getDaysSinceInspection(insp.inspection_date) <= 90
-  );
-  if (hasRecentFailure) {
-    score -= 10;
-  }
-
-  return Math.max(0, Math.min(100, Math.round(score)));
-}
-
-function getPassStreak(inspections: Array<{ results: string }>): number {
+function getPassStreak(inspections: InspectionRecord[]): number {
   let streak = 0;
   for (const insp of inspections) {
     const r = insp.results.toLowerCase();
@@ -490,12 +562,73 @@ function getPassStreak(inspections: Array<{ results: string }>): number {
   return streak;
 }
 
-function getDaysSinceInspection(date: string): number {
-  const inspectionDate = new Date(date);
-  const now = new Date();
-  const diffTime = Math.abs(now.getTime() - inspectionDate.getTime());
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+/**
+ * Recalculate CleanPlate Score for an establishment
+ * 
+ * Algorithm v2.0:
+ * Score = (Result × 0.35) + (Violations × 0.25) + (Trend × 0.15) + (TrackRecord × 0.15) + (Recency × 0.10)
+ */
+async function recalculateScore(establishmentId: string, riskLevel: number, supabase: any) {
+  try {
+    // Fetch recent inspections (get more for track record calculation)
+    const { data: inspections } = await supabase
+      .from("inspections")
+      .select("results, inspection_date, violation_count, critical_count")
+      .eq("establishment_id", establishmentId)
+      .order("inspection_date", { ascending: false })
+      .limit(10);
+
+    if (!inspections || inspections.length === 0) return;
+
+    const latest = inspections[0];
+    const daysSince = getDaysSinceInspection(latest.inspection_date);
+
+    // Calculate all components
+    const resultScore = calculateResultScore(inspections, riskLevel);
+    const violationsScore = calculateViolationsScore(latest);
+    const trendScore = calculateTrendScore(inspections);
+    const trackRecordScore = calculateTrackRecordScore(inspections);
+    const recencyScore = calculateRecencyScore(daysSince, riskLevel);
+
+    // Apply weights: 35/25/15/15/10
+    let score = 
+      resultScore * 0.35 +
+      violationsScore * 0.25 +
+      trendScore * 0.15 +
+      trackRecordScore * 0.15 +
+      recencyScore * 0.10;
+
+    // Apply modifiers
+    const passStreak = getPassStreak(inspections);
+    if (passStreak >= 3) {
+      score += 5; // Bonus for 3+ consecutive passes
+    }
+
+    // Penalty for recent failure (within 90 days)
+    const hasRecentFailure = inspections.some(
+      (insp: InspectionRecord) =>
+        insp.results.toLowerCase().includes("fail") &&
+        getDaysSinceInspection(insp.inspection_date) <= 90
+    );
+    if (hasRecentFailure) {
+      score -= 10;
+    }
+
+    // Clamp to 0-100
+    const finalScore = Math.max(0, Math.min(100, Math.round(score)));
+
+    // Update establishment with new score
+    await supabase
+      .from("establishments")
+      .update({
+        cleanplate_score: finalScore,
+        pass_streak: passStreak,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", establishmentId);
+
+    console.log(`Updated score for ${establishmentId}: ${finalScore}`);
+  } catch (error) {
+    console.error(`Failed to recalculate score for ${establishmentId}:`, error);
+  }
 }
-
-
-

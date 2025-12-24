@@ -64,24 +64,47 @@ export async function GET(request: NextRequest) {
       console.error("Establishments query error:", error);
       return NextResponse.json(
         { error: "Failed to fetch establishments" },
-        { status: 500 }
+        { 
+          status: 500,
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        }
       );
     }
 
-    return NextResponse.json({
-      data: data || [],
-      meta: {
-        total: count || 0,
-        limit,
-        offset,
-        has_more: (count || 0) > offset + limit,
+    return NextResponse.json(
+      {
+        data: data || [],
+        meta: {
+          total: count || 0,
+          limit,
+          offset,
+          has_more: (count || 0) > offset + limit,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Establishments route error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     );
   }
 }

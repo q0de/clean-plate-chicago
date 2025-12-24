@@ -22,7 +22,7 @@ const statusConfig = {
     textColor: "text-white",
     icon: AlertTriangle,
     label: "CONDITIONAL",
-    ariaLabel: "Passed with conditions",
+    ariaLabel: "Conditional pass",
   },
   fail: {
     bgColor: "bg-red-500",

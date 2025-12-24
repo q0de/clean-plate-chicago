@@ -5,14 +5,14 @@ require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local');
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Missing Supabase credentials. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local');
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Chicago neighborhood boundaries GeoJSON
 const BOUNDARIES_URL = 'https://data.cityofchicago.org/resource/igwz-8jzy.geojson';
@@ -91,23 +91,35 @@ async function assignNeighborhoods() {
     neighborhoodMap[normalizeSlug(n.name)] = n.id;
   }
   
-  // Fetch all establishments
-  const { data: establishments, error: estError } = await supabase
-    .from('establishments')
-    .select('id, dba_name, latitude, longitude, neighborhood_id')
-    .is('neighborhood_id', null);
+  // Fetch all establishments in batches
+  let offset = 0;
+  const batchSize = 1000;
+  let totalAssigned = 0;
+  let totalNotFound = 0;
   
-  if (estError) {
-    console.error('Failed to fetch establishments:', estError);
-    return;
-  }
-  
-  console.log(`Found ${establishments.length} establishments without neighborhoods`);
-  
-  let assigned = 0;
-  let notFound = 0;
-  
-  for (const est of establishments) {
+  while (true) {
+    const { data: establishments, error: estError } = await supabase
+      .from('establishments')
+      .select('id, dba_name, latitude, longitude, neighborhood_id')
+      .is('neighborhood_id', null)
+      .range(offset, offset + batchSize - 1);
+    
+    if (estError) {
+      console.error('Failed to fetch establishments:', estError);
+      return;
+    }
+    
+    if (!establishments || establishments.length === 0) {
+      console.log('No more establishments to process.');
+      break;
+    }
+    
+    console.log(`\nBatch ${Math.floor(offset/batchSize) + 1}: Processing ${establishments.length} establishments...`);
+    
+    let assigned = 0;
+    let notFound = 0;
+    
+    for (const est of establishments) {
     if (!est.latitude || !est.longitude) {
       notFound++;
       continue;
@@ -165,14 +177,24 @@ async function assignNeighborhoods() {
     }
     
     // Progress indicator
-    if ((assigned + notFound) % 50 === 0) {
+    if ((assigned + notFound) % 100 === 0) {
       console.log(`Progress: ${assigned} assigned, ${notFound} not found`);
     }
   }
   
+  totalAssigned += assigned;
+  totalNotFound += notFound;
+  console.log(`Batch complete: ${assigned} assigned, ${notFound} not found`);
+  
+  offset += batchSize;
+  
+  // Small delay between batches
+  await new Promise(r => setTimeout(r, 500));
+  }
+  
   console.log('\n=== Assignment Complete ===');
-  console.log(`Assigned: ${assigned}`);
-  console.log(`Not found: ${notFound}`);
+  console.log(`Total Assigned: ${totalAssigned}`);
+  console.log(`Total Not found: ${totalNotFound}`);
   
   // Update neighborhood stats
   console.log('\nUpdating neighborhood statistics...');

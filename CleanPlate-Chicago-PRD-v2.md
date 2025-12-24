@@ -1212,7 +1212,6 @@ interface Violation {
   violation_description: string;
   violation_comment?: string;
   is_critical: boolean;
-  plain_english?: string;
 }
 
 interface Inspection {
@@ -1290,7 +1289,7 @@ export function ViolationsAccordion({ inspections }: ViolationsAccordionProps) {
                   </Chip>
                 )}
                 <p className="font-medium text-sm mb-1">
-                  Code {violation.violation_code}: {violation.plain_english || violation.violation_description}
+                  Code {violation.violation_code}: {violation.violation_description}
                 </p>
                 {violation.violation_comment && (
                   <p className="text-xs text-default-500">

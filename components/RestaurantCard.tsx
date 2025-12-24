@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { ScoreDisplay } from "./ScoreDisplay";
 import { useCardDesign } from "@/lib/card-design-context";
+import { useColorTheme } from "@/lib/color-theme-context";
 
 interface Restaurant {
   slug: string;
@@ -227,20 +228,18 @@ function getPrimaryViolationTheme(
   return sortedThemes[0] || null;
 }
 
-// Get score color based on status
-function getScoreColor(score: number, status: "fail" | "conditional" | "pass"): string {
-  if (status === "fail") {
-    return "#dc2626"; // red-600
-  } else if (status === "conditional") {
-    return "#ca8a04"; // yellow-600 / amber-600
-  } else {
-    return "#10b981"; // emerald-500
-  }
+// Get score color based on score value - 4 tiers including exceptional (90+)
+function getScoreColor(score: number): string {
+  if (score >= 90) return "#14b8a6"; // teal-500 (exceptional green-blue)
+  if (score >= 80) return "#10b981"; // emerald-500
+  if (score >= 60) return "#f59e0b"; // amber-500
+  return "#ef4444"; // red-500
 }
 
 export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
   const router = useRouter();
   const { config } = useCardDesign();
+  const { colors: themeColors } = useColorTheme();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(true);
   
@@ -328,15 +327,19 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
     if (onPress) {
       onPress();
     } else {
+      if (!restaurant.slug) {
+        console.error("RestaurantCard: slug is missing for restaurant:", restaurant.dba_name);
+        return;
+      }
       router.push(`/restaurant/${restaurant.slug}`);
     }
   };
   
-  // Status banner config with custom SVG icons
+  // Status banner config with custom SVG icons - using theme colors
   const statusConfig = {
     fail: {
-      bgColor: "bg-red-600",
-      textColor: "text-white",
+      bgColor: themeColors.fail.bg,
+      textColor: themeColors.fail.text,
       iconSvg: (
         <svg xmlns="http://www.w3.org/2000/svg" width={config.statusIconSize} height={config.statusIconSize} viewBox="0 0 20 24" fill="none" className="flex-shrink-0">
           <path d="M6.99935 16.1666L9.99935 13.1666L12.9994 16.1666L14.166 14.9999L11.166 11.9999L14.166 8.99992L12.9994 7.83325L9.99935 10.8333L6.99935 7.83325L5.83268 8.99992L8.83268 11.9999L5.83268 14.9999L6.99935 16.1666ZM9.99935 20.3333C8.84657 20.3333 7.76324 20.1145 6.74935 19.677C5.73546 19.2395 4.85352 18.6458 4.10352 17.8958C3.35352 17.1458 2.75977 16.2638 2.32227 15.2499C1.88477 14.236 1.66602 13.1527 1.66602 11.9999C1.66602 10.8471 1.88477 9.76381 2.32227 8.74992C2.75977 7.73603 3.35352 6.85408 4.10352 6.10408C4.85352 5.35408 5.73546 4.76033 6.74935 4.32283C7.76324 3.88533 8.84657 3.66658 9.99935 3.66658C11.1521 3.66658 12.2355 3.88533 13.2494 4.32283C14.2632 4.76033 15.1452 5.35408 15.8952 6.10408C16.6452 6.85408 17.2389 7.73603 17.6764 8.74992C18.1139 9.76381 18.3327 10.8471 18.3327 11.9999C18.3327 13.1527 18.1139 14.236 17.6764 15.2499C17.2389 16.2638 16.6452 17.1458 15.8952 17.8958C15.1452 18.6458 14.2632 19.2395 13.2494 19.677C12.2355 20.1145 11.1521 20.3333 9.99935 20.3333ZM9.99935 18.6666C11.8605 18.6666 13.4369 18.0208 14.7285 16.7291C16.0202 15.4374 16.666 13.861 16.666 11.9999C16.666 10.1388 16.0202 8.56242 14.7285 7.27075C13.4369 5.97908 11.8605 5.33325 9.99935 5.33325C8.13824 5.33325 6.56185 5.97908 5.27018 7.27075C3.97852 8.56242 3.33268 10.1388 3.33268 11.9999C3.33268 13.861 3.97852 15.4374 5.27018 16.7291C6.56185 18.0208 8.13824 18.6666 9.99935 18.6666Z" fill="currentColor"/>
@@ -345,24 +348,24 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
       label: "FAILED",
     },
     conditional: {
-      bgColor: "bg-yellow-500",
-      textColor: "text-amber-950",
+      bgColor: themeColors.conditional.bg,
+      textColor: themeColors.conditional.text,
       iconSvg: (
         <AlertTriangle style={{ width: `${config.statusIconSize}px`, height: `${config.statusIconSize}px` }} />
       ),
       label: "CONDITIONAL",
     },
     pass: {
-      bgColor: "bg-emerald-600",
-      textColor: "text-white",
+      bgColor: themeColors.pass.bg,
+      textColor: themeColors.pass.text,
       iconSvg: (
         <Check style={{ width: `${config.statusIconSize}px`, height: `${config.statusIconSize}px` }} />
       ),
       label: "PASS",
     },
     closed: {
-      bgColor: "bg-gray-500",
-      textColor: "text-white",
+      bgColor: themeColors.closed.bg,
+      textColor: themeColors.closed.text,
       iconSvg: (
         <XCircle style={{ width: `${config.statusIconSize}px`, height: `${config.statusIconSize}px` }} />
       ),
@@ -371,7 +374,7 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
   };
   
   const currentStatusConfig = statusConfig[status];
-  const scoreColor = getScoreColor(restaurant.cleanplate_score, status);
+  const scoreColor = getScoreColor(restaurant.cleanplate_score);
   const ViolationIcon = violationConfig?.icon;
   
   // Get card border color based on status (for hover state)
@@ -383,6 +386,7 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
   };
   
   const cardBorderColor = getCardBorderColor();
+  const isBadgeStyle = themeColors.style === "badge";
   
   return (
     <div 
@@ -390,49 +394,84 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
       className={`bg-white border-2 border-transparent ${cardBorderColor} rounded-2xl shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)] hover:shadow-xl transition-all duration-200 cursor-pointer overflow-hidden group outline-none`}
       style={{ width: `${config.cardWidth}px` }}
     >
-      {/* Status Banner */}
-      <div 
-        className={`${currentStatusConfig.bgColor} flex items-center justify-between px-5 py-2`}
-        style={{ height: `${config.statusBannerHeight}px` }}
-      >
-        <div className="flex items-center gap-2">
-          <div className={currentStatusConfig.textColor}>
-            {currentStatusConfig.iconSvg}
-          </div>
-          <span 
-            className={`font-bold tracking-wide uppercase ${currentStatusConfig.textColor}`}
-            style={{ fontSize: `${config.statusTextSize}px` }}
-          >
-            {currentStatusConfig.label}
-          </span>
-        </div>
-        <span 
-          className={`font-bold ${currentStatusConfig.textColor} opacity-90`}
-          style={{ fontSize: `${config.dateTextSize}px` }}
+      {/* Banner Style - Full width colored banner (only for banner style) */}
+      {!isBadgeStyle && (
+        <div 
+          className={`${currentStatusConfig.bgColor} px-5 py-2.5`}
+          style={{ minHeight: `${config.statusBannerHeight}px` }}
         >
-          {formattedDate}
-        </span>
-      </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 cursor-help" title="Inspection Result">
+              <div className={currentStatusConfig.textColor}>
+                {currentStatusConfig.iconSvg}
+              </div>
+              <span 
+                className={`font-bold tracking-wide uppercase ${currentStatusConfig.textColor}`}
+                style={{ fontSize: `${config.statusTextSize}px` }}
+              >
+                {currentStatusConfig.label}
+              </span>
+            </div>
+            <span 
+              className={`font-bold ${currentStatusConfig.textColor} opacity-90`}
+              style={{ fontSize: `${config.dateTextSize}px` }}
+            >
+              {formattedDate}
+            </span>
+          </div>
+        </div>
+      )}
       
       {/* Image Section */}
       <div 
-        className="relative bg-gray-200 overflow-hidden"
+        className={`relative bg-gray-200 overflow-hidden ${isBadgeStyle ? 'rounded-t-2xl' : ''}`}
         style={{ height: `${config.imageSectionHeight}px` }}
       >
         {imageLoading ? (
           /* Loading skeleton */
           <div className="absolute inset-0 bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse" />
         ) : imageUrl ? (
-          /* Yelp image */
+          /* Yelp image - scales up slightly on hover */
           <img 
             src={imageUrl} 
             alt={restaurant.dba_name}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-110"
           />
         ) : (
           /* Fallback placeholder */
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center transition-transform duration-300 ease-out group-hover:scale-110">
             <Utensils className="w-16 h-16 text-gray-500 opacity-50" />
+          </div>
+        )}
+        
+        {/* Badge Style - Overlay badges on image */}
+        {isBadgeStyle && (
+          <div className="absolute inset-x-0 top-0 p-3 flex items-start justify-between">
+            {/* Status Badge */}
+            <div 
+              className={`${currentStatusConfig.bgColor} px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg`}
+              title="Inspection Result"
+            >
+              <div className={currentStatusConfig.textColor}>
+                {currentStatusConfig.iconSvg}
+              </div>
+              <span 
+                className={`font-bold tracking-wide uppercase ${currentStatusConfig.textColor}`}
+                style={{ fontSize: `${config.statusTextSize - 2}px` }}
+              >
+                {currentStatusConfig.label}
+              </span>
+            </div>
+            
+            {/* Date Badge */}
+            <div className={`${themeColors.dateBadge.bg} px-3 py-1.5 rounded-full shadow-lg`}>
+              <span 
+                className={`font-semibold ${themeColors.dateBadge.text}`}
+                style={{ fontSize: `${config.dateTextSize}px` }}
+              >
+                {formattedDate}
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -469,8 +508,12 @@ export function RestaurantCard({ restaurant, onPress }: RestaurantCardProps) {
           </div>
           
           {/* Circular Score Display */}
-          <div className="flex-shrink-0">
-            <div className="relative" style={{ width: `${config.scoreIconSize}px`, height: `${config.scoreIconSize}px` }}>
+          <div className="flex-shrink-0 flex flex-col items-center group/score relative">
+            <div 
+              className="relative cursor-help" 
+              style={{ width: `${config.scoreIconSize}px`, height: `${config.scoreIconSize}px` }}
+              title="CleanPlate Score"
+            >
               <svg
                 width={config.scoreIconSize}
                 height={config.scoreIconSize}

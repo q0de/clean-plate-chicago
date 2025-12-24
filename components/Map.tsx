@@ -10,6 +10,8 @@ export interface MapHandle {
   getCenter: () => [number, number] | null;
 }
 
+type ColorMode = "inspection" | "score";
+
 interface MapProps {
   restaurants: MapRestaurant[];
   center?: [number, number];
@@ -18,6 +20,7 @@ interface MapProps {
   onMoveEnd?: (center: [number, number], zoom: number) => void;
   highlightedId?: string | null;
   selectedNeighborhoodSlug?: string | null;
+  colorMode?: ColorMode;
   className?: string;
 }
 
@@ -33,6 +36,7 @@ function MapComponent(
     onMoveEnd,
     highlightedId,
     selectedNeighborhoodSlug,
+    colorMode = "inspection",
     className = "w-full h-full"
   }: MapProps, 
   ref: Ref<MapHandle>
@@ -166,15 +170,38 @@ function MapComponent(
   const restaurantsRef = useRef<MapRestaurant[]>([]);
   restaurantsRef.current = restaurants;
 
+  // Color constants - includes exceptional (90+) tier and closed (out of business)
+  const colors: Record<string, string> = {
+    closed: "#9ca3af",      // gray-400 for out of business
+    exceptional: "#14b8a6", // teal-500 for 90+ scores (green-blue)
+    pass: "#10b981",        // emerald-500 for 80-89 or passing inspection
+    conditional: "#f59e0b", // amber-500 for 60-79 or conditional
+    fail: "#ef4444",        // red-500 for <60 or failed
+  };
+
+  // Helper function to get marker status based on colorMode
+  const getMarkerStatus = (restaurant: MapRestaurant, mode: ColorMode): "closed" | "exceptional" | "pass" | "conditional" | "fail" => {
+    // Always check for out of business first
+    const result = restaurant.latest_result.toLowerCase();
+    if (result.includes("out of business")) return "closed";
+    
+    if (mode === "score") {
+      // Color by CleanPlate Score - 4 tiers
+      if (restaurant.cleanplate_score >= 90) return "exceptional";
+      if (restaurant.cleanplate_score >= 80) return "pass";
+      if (restaurant.cleanplate_score >= 60) return "conditional";
+      return "fail";
+    } else {
+      // Color by Inspection Result (default) - no exceptional tier
+      if (result.includes("fail")) return "fail";
+      if (result.includes("condition")) return "conditional";
+      return "pass";
+    }
+  };
+
   // Add/update markers - only when restaurants change, NOT when highlightedId changes
   useEffect(() => {
     if (!mapInstance.current || !isLoaded) return;
-
-    const colors = {
-      pass: "#10b981",
-      conditional: "#f59e0b",
-      fail: "#ef4444",
-    };
 
     const currentIds = new Set(restaurants.map(r => r.id));
     
@@ -196,19 +223,7 @@ function MapComponent(
         return;
       }
 
-      // Determine status based on inspection result first, then score
-      const getStatus = () => {
-        const result = restaurant.latest_result.toLowerCase();
-        // Explicit fail always shows red
-        if (result.includes("fail")) return "fail";
-        // Conditional pass shows yellow
-        if (result.includes("condition")) return "conditional";
-        // Score below 60 is concerning even if passed - show yellow
-        if (restaurant.cleanplate_score < 60) return "conditional";
-        // Passed inspection with score >= 60 shows green
-        return "pass";
-      };
-      const status = getStatus();
+      const status = getMarkerStatus(restaurant, colorMode);
 
       // Validate coordinates
       if (typeof restaurant.longitude !== 'number' || typeof restaurant.latitude !== 'number' ||
@@ -264,7 +279,20 @@ function MapComponent(
 
       markersRef.current.set(restaurant.id, { marker, element: el, innerElement: inner });
     });
-  }, [restaurants, isLoaded, onMarkerClick]);
+  }, [restaurants, isLoaded, onMarkerClick, colorMode]);
+
+  // Update marker colors when colorMode changes
+  useEffect(() => {
+    if (!isLoaded) return;
+    
+    markersRef.current.forEach((data, id) => {
+      const restaurant = restaurantsRef.current.find(r => r.id === id);
+      if (restaurant) {
+        const status = getMarkerStatus(restaurant, colorMode);
+        data.innerElement.style.backgroundColor = colors[status];
+      }
+    });
+  }, [colorMode, isLoaded]);
 
   // Update highlighted marker - separate effect, only runs when highlightedId changes
   // Scale the INNER element to avoid conflicting with Mapbox's positioning transform

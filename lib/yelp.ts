@@ -10,6 +10,10 @@ interface YelpBusiness {
   phone?: string;
   display_phone?: string;
   is_closed?: boolean;
+  categories?: Array<{
+    alias: string;
+    title: string;
+  }>;
   hours?: Array<{
     open: Array<{
       is_overnight: boolean;
@@ -33,7 +37,63 @@ export interface ExtendedRestaurantData {
   phone: string | null;
   isOpenNow: boolean | null;
   yelpUrl: string | null;
+  categories: string[] | null;
+  tagline: string | null;
   source: "yelp" | "google" | null;
+  fetchedAt: string;
+}
+
+/**
+ * Generate a tagline from Yelp categories
+ * e.g., ["Pizza", "Italian", "Deep Dish"] → "Pizza, Italian & Deep Dish"
+ */
+function generateTaglineFromCategories(categories: Array<{ alias: string; title: string }> | undefined): string | null {
+  if (!categories || categories.length === 0) return null;
+  
+  const titles = categories.map(c => c.title).slice(0, 3); // Max 3 categories
+  
+  if (titles.length === 1) {
+    return titles[0];
+  } else if (titles.length === 2) {
+    return `${titles[0]} & ${titles[1]}`;
+  } else {
+    return `${titles.slice(0, -1).join(", ")} & ${titles[titles.length - 1]}`;
+  }
+}
+
+/**
+ * Generate a fallback tagline based on facility type for non-Yelp businesses
+ */
+export function generateFallbackTagline(facilityType: string): string {
+  const type = facilityType.toLowerCase();
+  
+  if (type.includes("school") || type.includes("daycare") || type.includes("children")) {
+    return "Educational Institution Food Service";
+  }
+  if (type.includes("bakery")) {
+    return "Bakery & Fresh Baked Goods";
+  }
+  if (type.includes("grocery") || type.includes("market")) {
+    return "Grocery & Food Market";
+  }
+  if (type.includes("coffee") || type.includes("cafe")) {
+    return "Coffee & Café";
+  }
+  if (type.includes("bar") || type.includes("tavern") || type.includes("pub")) {
+    return "Bar & Tavern";
+  }
+  if (type.includes("catering")) {
+    return "Catering Services";
+  }
+  if (type.includes("hospital") || type.includes("nursing") || type.includes("assisted")) {
+    return "Healthcare Food Service";
+  }
+  if (type.includes("hotel") || type.includes("motel")) {
+    return "Hotel Dining";
+  }
+  
+  // Default
+  return facilityType;
 }
 
 interface YelpSearchResponse {
@@ -304,7 +364,7 @@ export async function getRestaurantImageUrl(
 }
 
 /**
- * Get extended restaurant data including image, phone, and hours
+ * Get extended restaurant data including image, phone, hours, and categories
  */
 export async function getExtendedRestaurantData(
   name: string,
@@ -318,11 +378,14 @@ export async function getExtendedRestaurantData(
       phone: null,
       isOpenNow: null,
       yelpUrl: null,
+      categories: null,
+      tagline: null,
       source: null,
+      fetchedAt: new Date().toISOString(),
     };
   }
   
-  // If we have a business ID, fetch full details to get hours
+  // If we have a business ID, fetch full details to get hours and categories
   let fullDetails = business;
   if (business.id) {
     const details = await getYelpBusinessDetails(business.id);
@@ -331,12 +394,18 @@ export async function getExtendedRestaurantData(
     }
   }
   
+  const categories = fullDetails.categories?.map(c => c.title) || null;
+  const tagline = generateTaglineFromCategories(fullDetails.categories);
+  
   return {
     imageUrl: fullDetails.image_url || null,
     phone: fullDetails.display_phone || fullDetails.phone || null,
     isOpenNow: fullDetails.hours?.[0]?.is_open_now ?? null,
     yelpUrl: fullDetails.url || null,
+    categories,
+    tagline,
     source: "yelp",
+    fetchedAt: new Date().toISOString(),
   };
 }
 

@@ -8,6 +8,8 @@ import { NoiseTexture } from "@/components/NoiseTexture";
 import { RestaurantCardSkeleton } from "@/components/RestaurantCardSkeleton";
 import { BottomNav } from "@/components/BottomNav";
 import { CardDesignControls } from "@/components/CardDesignControls";
+import { MapPromotion } from "@/components/MapPromotion";
+import { ColorThemeSelector } from "@/components/ColorThemeSelector";
 import { 
   UtensilsCrossed, 
   ShoppingBag, 
@@ -69,10 +71,22 @@ export default function Home() {
     fetch("/api/recent-failures?limit=4")
       .then((res) => res.json())
       .then((data) => {
-        setRecentFailures(data.data || []);
+        const restaurants = data.data || [];
+        // Log any restaurants missing slugs for debugging
+        restaurants.forEach((restaurant: Restaurant) => {
+          if (!restaurant.slug) {
+            console.error("Restaurant missing slug:", restaurant.dba_name, restaurant);
+          }
+        });
+        // Filter out any restaurants without slugs as a safety measure
+        const validRestaurants = restaurants.filter((r: Restaurant) => r.slug && r.slug.trim() !== '');
+        setRecentFailures(validRestaurants);
         setIsLoadingFailures(false);
       })
-      .catch(() => setIsLoadingFailures(false));
+      .catch((error) => {
+        console.error("Failed to fetch recent failures:", error);
+        setIsLoadingFailures(false);
+      });
 
     fetch("/api/neighborhoods?sort=pass_rate&limit=12")
       .then((res) => res.json())
@@ -316,6 +330,9 @@ export default function Home() {
         )}
       </section>
 
+      {/* Restaurant Hygiene Map Promotion Section */}
+      <MapPromotion />
+
       {/* Neighborhoods Section */}
       <section className="max-w-6xl mx-auto px-4 mt-10 mb-8">
         <div className="flex items-center gap-3 mb-6">
@@ -368,6 +385,7 @@ export default function Home() {
 
       <BottomNav />
       <CardDesignControls />
+      <ColorThemeSelector />
     </div>
   );
 }

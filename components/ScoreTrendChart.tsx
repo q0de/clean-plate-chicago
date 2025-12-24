@@ -17,6 +17,9 @@ interface InspectionData {
   inspection_date: string;
   results: string;
   score?: number;
+  violation_count?: number;
+  critical_count?: number;
+  violations?: { is_critical?: boolean }[];
 }
 
 interface ScoreTrendChartProps {
@@ -46,6 +49,8 @@ interface CustomTooltipProps {
       fullDate: string;
       score: number;
       result: string;
+      violations?: number;
+      critical?: number;
     };
   }>;
 }
@@ -76,6 +81,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
                 : "PASSED"}
           </span>
         </div>
+        {typeof data.violations === "number" && (
+          <div className="mt-2 text-xs text-gray-600">
+            <span className="font-semibold">{data.violations}</span> violations
+            {typeof data.critical === "number" && data.critical > 0 && (
+              <span className="text-red-600 font-semibold"> • {data.critical} critical</span>
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -89,19 +102,35 @@ export function ScoreTrendChart({ inspections }: ScoreTrendChartProps) {
       (a, b) => new Date(a.inspection_date).getTime() - new Date(b.inspection_date).getTime()
     );
 
-    return sorted.map((inspection) => ({
-      date: new Date(inspection.inspection_date).toLocaleDateString("en-US", {
-        month: "short",
-        year: "2-digit",
-      }),
-      fullDate: new Date(inspection.inspection_date).toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }),
-      score: inspection.score ?? calculateScore(inspection.results),
-      result: inspection.results,
-    }));
+    return sorted.map((inspection) => {
+      const date = new Date(inspection.inspection_date);
+      const violations =
+        inspection.violation_count ??
+        inspection.violations?.length ??
+        undefined;
+      const critical =
+        inspection.critical_count ??
+        inspection.violations?.filter((v) => v.is_critical)?.length ??
+        undefined;
+      return {
+        date: date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "2-digit",
+        }),
+        fullDate: date.toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        }),
+        score: inspection.score ?? calculateScore(inspection.results),
+        result: inspection.results,
+        violations,
+        critical,
+        // Add a unique timestamp for proper ordering
+        timestamp: date.getTime(),
+      };
+    });
   }, [inspections]);
 
   if (chartData.length === 0) {
@@ -117,12 +146,7 @@ export function ScoreTrendChart({ inspections }: ScoreTrendChartProps) {
   const gradientId = "scoreGradient";
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <div className="mb-4">
-        <h3 className="font-bold text-gray-900">Score Trend</h3>
-        <p className="text-sm text-gray-500">Inspection scores over time</p>
-      </div>
-      
+    <div>
       <div style={{ width: '100%', height: 200 }}>
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart

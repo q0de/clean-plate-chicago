@@ -1,0 +1,299 @@
+[dotenv@17.2.3] injecting env (7) from .env.local -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+Fetching inspection data from Chicago Data Portal...
+Importing 36 months of history...
+Date range: 2022-12-24 to present
+Fetching page 1...
+  Got 1000 records (total: 1000)
+Fetching page 2...
+  Got 1000 records (total: 2000)
+Fetching page 3...
+  Got 1000 records (total: 3000)
+Fetching page 4...
+  Got 1000 records (total: 4000)
+Fetching page 5...
+  Got 1000 records (total: 5000)
+Fetching page 6...
+  Got 1000 records (total: 6000)
+Fetching page 7...
+  Got 1000 records (total: 7000)
+Fetching page 8...
+  Got 1000 records (total: 8000)
+Fetching page 9...
+  Got 1000 records (total: 9000)
+Fetching page 10...
+  Got 1000 records (total: 10000)
+Fetching page 11...
+  Got 1000 records (total: 11000)
+Fetching page 12...
+  Got 1000 records (total: 12000)
+Fetching page 13...
+  Got 1000 records (total: 13000)
+Fetching page 14...
+  Got 1000 records (total: 14000)
+Fetching page 15...
+  Got 1000 records (total: 15000)
+Fetching page 16...
+  Got 1000 records (total: 16000)
+Fetching page 17...
+  Got 1000 records (total: 17000)
+Fetching page 18...
+  Got 1000 records (total: 18000)
+Fetching page 19...
+  Got 1000 records (total: 19000)
+Fetching page 20...
+  Got 1000 records (total: 20000)
+Fetching page 21...
+  Got 1000 records (total: 21000)
+Fetching page 22...
+  Got 1000 records (total: 22000)
+Fetching page 23...
+  Got 1000 records (total: 23000)
+Fetching page 24...
+  Got 1000 records (total: 24000)
+Fetching page 25...
+  Got 1000 records (total: 25000)
+Fetching page 26...
+  Got 1000 records (total: 26000)
+Fetching page 27...
+  Got 1000 records (total: 27000)
+Fetching page 28...
+  Got 1000 records (total: 28000)
+Fetching page 29...
+  Got 1000 records (total: 29000)
+Fetching page 30...
+  Got 1000 records (total: 30000)
+Fetching page 31...
+  Got 1000 records (total: 31000)
+Fetching page 32...
+  Got 1000 records (total: 32000)
+Fetching page 33...
+  Got 1000 records (total: 33000)
+Fetching page 34...
+  Got 1000 records (total: 34000)
+Fetching page 35...
+  Got 1000 records (total: 35000)
+Fetching page 36...
+  Got 1000 records (total: 36000)
+Fetching page 37...
+  Got 1000 records (total: 37000)
+Fetching page 38...
+  Got 1000 records (total: 38000)
+Fetching page 39...
+  Got 1000 records (total: 39000)
+Fetching page 40...
+  Got 1000 records (total: 40000)
+Fetching page 41...
+  Got 1000 records (total: 41000)
+Fetching page 42...
+  Got 1000 records (total: 42000)
+Fetching page 43...
+  Got 1000 records (total: 43000)
+Fetching page 44...
+  Got 1000 records (total: 44000)
+Fetching page 45...
+  Got 1000 records (total: 45000)
+Fetching page 46...
+  Got 1000 records (total: 46000)
+Fetching page 47...
+  Got 1000 records (total: 47000)
+Fetching page 48...
+  Got 1000 records (total: 48000)
+Fetching page 49...
+  Got 1000 records (total: 49000)
+Fetching page 50...
+  Got 1000 records (total: 50000)
+Fetching page 51...
+  Got 1000 records (total: 51000)
+Fetching page 52...
+  Got 1000 records (total: 52000)
+Fetching page 53...
+  Got 1000 records (total: 53000)
+Fetching page 54...
+  Got 1000 records (total: 54000)
+Fetching page 55...
+  Got 701 records (total: 54701)
+Fetched 54701 total inspection records
+Found 17193 unique establishments
+Incremental import mode (set CLEAR_DATA=true to clear first)
+Progress: 100/17193 (1%) - Imported: 99 establishments, 0 inspections
+Progress: 200/17193 (1%) - Imported: 199 establishments, 0 inspections
+Progress: 300/17193 (2%) - Imported: 299 establishments, 0 inspections
+Progress: 400/17193 (2%) - Imported: 399 establishments, 0 inspections
+Progress: 500/17193 (3%) - Imported: 499 establishments, 0 inspections
+Progress: 600/17193 (3%) - Imported: 599 establishments, 0 inspections
+Progress: 700/17193 (4%) - Imported: 699 establishments, 0 inspections
+Progress: 800/17193 (5%) - Imported: 799 establishments, 0 inspections
+Progress: 900/17193 (5%) - Imported: 899 establishments, 0 inspections
+Progress: 1000/17193 (6%) - Imported: 999 establishments, 0 inspections
+Progress: 1100/17193 (6%) - Imported: 1099 establishments, 0 inspections
+Progress: 1200/17193 (7%) - Imported: 1199 establishments, 0 inspections
+Progress: 1300/17193 (8%) - Imported: 1299 establishments, 0 inspections
+Progress: 1400/17193 (8%) - Imported: 1399 establishments, 0 inspections
+Progress: 1500/17193 (9%) - Imported: 1499 establishments, 0 inspections
+Progress: 1600/17193 (9%) - Imported: 1599 establishments, 0 inspections
+Progress: 1700/17193 (10%) - Imported: 1699 establishments, 0 inspections
+Progress: 1800/17193 (10%) - Imported: 1799 establishments, 0 inspections
+Progress: 1900/17193 (11%) - Imported: 1899 establishments, 0 inspections
+Progress: 2000/17193 (12%) - Imported: 1999 establishments, 0 inspections
+Progress: 2100/17193 (12%) - Imported: 2099 establishments, 0 inspections
+Progress: 2200/17193 (13%) - Imported: 2199 establishments, 0 inspections
+Progress: 2300/17193 (13%) - Imported: 2299 establishments, 0 inspections
+Progress: 2400/17193 (14%) - Imported: 2399 establishments, 0 inspections
+Progress: 2500/17193 (15%) - Imported: 2499 establishments, 0 inspections
+Progress: 2600/17193 (15%) - Imported: 2599 establishments, 0 inspections
+Progress: 2700/17193 (16%) - Imported: 2699 establishments, 0 inspections
+Progress: 2800/17193 (16%) - Imported: 2799 establishments, 0 inspections
+Progress: 2900/17193 (17%) - Imported: 2899 establishments, 0 inspections
+Progress: 3000/17193 (17%) - Imported: 2999 establishments, 0 inspections
+Progress: 3100/17193 (18%) - Imported: 3099 establishments, 0 inspections
+Progress: 3200/17193 (19%) - Imported: 3199 establishments, 0 inspections
+Progress: 3300/17193 (19%) - Imported: 3299 establishments, 0 inspections
+Progress: 3400/17193 (20%) - Imported: 3399 establishments, 0 inspections
+Progress: 3500/17193 (20%) - Imported: 3499 establishments, 0 inspections
+Progress: 3600/17193 (21%) - Imported: 3599 establishments, 0 inspections
+Progress: 3700/17193 (22%) - Imported: 3699 establishments, 0 inspections
+Progress: 3800/17193 (22%) - Imported: 3799 establishments, 0 inspections
+Progress: 3900/17193 (23%) - Imported: 3899 establishments, 0 inspections
+Progress: 4000/17193 (23%) - Imported: 3999 establishments, 0 inspections
+Progress: 4100/17193 (24%) - Imported: 4099 establishments, 0 inspections
+Progress: 4200/17193 (24%) - Imported: 4199 establishments, 0 inspections
+Progress: 4300/17193 (25%) - Imported: 4299 establishments, 0 inspections
+Progress: 4400/17193 (26%) - Imported: 4399 establishments, 0 inspections
+Progress: 4500/17193 (26%) - Imported: 4499 establishments, 0 inspections
+Progress: 4600/17193 (27%) - Imported: 4599 establishments, 0 inspections
+Progress: 4700/17193 (27%) - Imported: 4699 establishments, 0 inspections
+Progress: 4800/17193 (28%) - Imported: 4799 establishments, 0 inspections
+Progress: 4900/17193 (28%) - Imported: 4899 establishments, 0 inspections
+Progress: 5000/17193 (29%) - Imported: 4999 establishments, 0 inspections
+Progress: 5100/17193 (30%) - Imported: 5099 establishments, 0 inspections
+Progress: 5200/17193 (30%) - Imported: 5199 establishments, 0 inspections
+Progress: 5300/17193 (31%) - Imported: 5299 establishments, 0 inspections
+Progress: 5400/17193 (31%) - Imported: 5399 establishments, 0 inspections
+Progress: 5500/17193 (32%) - Imported: 5499 establishments, 0 inspections
+Progress: 5600/17193 (33%) - Imported: 5599 establishments, 0 inspections
+Progress: 5700/17193 (33%) - Imported: 5699 establishments, 0 inspections
+Progress: 5800/17193 (34%) - Imported: 5799 establishments, 0 inspections
+Progress: 5900/17193 (34%) - Imported: 5899 establishments, 0 inspections
+Progress: 6000/17193 (35%) - Imported: 5999 establishments, 0 inspections
+Progress: 6100/17193 (35%) - Imported: 6099 establishments, 0 inspections
+Progress: 6200/17193 (36%) - Imported: 6199 establishments, 0 inspections
+Progress: 6300/17193 (37%) - Imported: 6299 establishments, 0 inspections
+Progress: 6400/17193 (37%) - Imported: 6399 establishments, 0 inspections
+Progress: 6500/17193 (38%) - Imported: 6499 establishments, 0 inspections
+Progress: 6600/17193 (38%) - Imported: 6599 establishments, 0 inspections
+Progress: 6700/17193 (39%) - Imported: 6699 establishments, 0 inspections
+Progress: 6800/17193 (40%) - Imported: 6799 establishments, 0 inspections
+Progress: 6900/17193 (40%) - Imported: 6899 establishments, 0 inspections
+Progress: 7000/17193 (41%) - Imported: 6999 establishments, 0 inspections
+Progress: 7100/17193 (41%) - Imported: 7099 establishments, 0 inspections
+Progress: 7200/17193 (42%) - Imported: 7199 establishments, 0 inspections
+Progress: 7300/17193 (42%) - Imported: 7299 establishments, 0 inspections
+Progress: 7400/17193 (43%) - Imported: 7399 establishments, 0 inspections
+Progress: 7500/17193 (44%) - Imported: 7499 establishments, 0 inspections
+Progress: 7600/17193 (44%) - Imported: 7599 establishments, 0 inspections
+Progress: 7700/17193 (45%) - Imported: 7699 establishments, 0 inspections
+Progress: 7800/17193 (45%) - Imported: 7799 establishments, 0 inspections
+Progress: 7900/17193 (46%) - Imported: 7899 establishments, 0 inspections
+Progress: 8000/17193 (47%) - Imported: 7999 establishments, 0 inspections
+Progress: 8100/17193 (47%) - Imported: 8099 establishments, 0 inspections
+Progress: 8200/17193 (48%) - Imported: 8199 establishments, 0 inspections
+Progress: 8300/17193 (48%) - Imported: 8299 establishments, 0 inspections
+Progress: 8400/17193 (49%) - Imported: 8399 establishments, 0 inspections
+Progress: 8500/17193 (49%) - Imported: 8499 establishments, 0 inspections
+Progress: 8600/17193 (50%) - Imported: 8599 establishments, 0 inspections
+Progress: 8700/17193 (51%) - Imported: 8699 establishments, 0 inspections
+Progress: 8800/17193 (51%) - Imported: 8799 establishments, 0 inspections
+Progress: 8900/17193 (52%) - Imported: 8899 establishments, 0 inspections
+Progress: 9000/17193 (52%) - Imported: 8999 establishments, 0 inspections
+Progress: 9100/17193 (53%) - Imported: 9099 establishments, 0 inspections
+Progress: 9200/17193 (54%) - Imported: 9199 establishments, 0 inspections
+Progress: 9300/17193 (54%) - Imported: 9299 establishments, 0 inspections
+Progress: 9400/17193 (55%) - Imported: 9399 establishments, 0 inspections
+Progress: 9500/17193 (55%) - Imported: 9499 establishments, 0 inspections
+Progress: 9600/17193 (56%) - Imported: 9599 establishments, 0 inspections
+Progress: 9700/17193 (56%) - Imported: 9699 establishments, 0 inspections
+Progress: 9800/17193 (57%) - Imported: 9799 establishments, 0 inspections
+Progress: 9900/17193 (58%) - Imported: 9899 establishments, 0 inspections
+Progress: 10000/17193 (58%) - Imported: 9999 establishments, 0 inspections
+Progress: 10100/17193 (59%) - Imported: 10099 establishments, 0 inspections
+Progress: 10200/17193 (59%) - Imported: 10199 establishments, 0 inspections
+Progress: 10300/17193 (60%) - Imported: 10299 establishments, 0 inspections
+Progress: 10400/17193 (60%) - Imported: 10399 establishments, 0 inspections
+Progress: 10500/17193 (61%) - Imported: 10499 establishments, 7 inspections
+Progress: 10600/17193 (62%) - Imported: 10599 establishments, 13 inspections
+Progress: 10700/17193 (62%) - Imported: 10699 establishments, 75 inspections
+Progress: 10800/17193 (63%) - Imported: 10799 establishments, 148 inspections
+Progress: 10900/17193 (63%) - Imported: 10899 establishments, 175 inspections
+Progress: 11000/17193 (64%) - Imported: 10999 establishments, 214 inspections
+Progress: 11100/17193 (65%) - Imported: 11099 establishments, 243 inspections
+Progress: 11200/17193 (65%) - Imported: 11199 establishments, 276 inspections
+Progress: 11300/17193 (66%) - Imported: 11299 establishments, 310 inspections
+Progress: 11400/17193 (66%) - Imported: 11399 establishments, 331 inspections
+Progress: 11500/17193 (67%) - Imported: 11499 establishments, 362 inspections
+Progress: 11600/17193 (67%) - Imported: 11599 establishments, 395 inspections
+Progress: 11700/17193 (68%) - Imported: 11699 establishments, 416 inspections
+Progress: 11800/17193 (69%) - Imported: 11799 establishments, 455 inspections
+Progress: 11900/17193 (69%) - Imported: 11899 establishments, 485 inspections
+Progress: 12000/17193 (70%) - Imported: 11999 establishments, 514 inspections
+Progress: 12100/17193 (70%) - Imported: 12099 establishments, 542 inspections
+Progress: 12200/17193 (71%) - Imported: 12199 establishments, 557 inspections
+Progress: 12300/17193 (72%) - Imported: 12299 establishments, 592 inspections
+Progress: 12400/17193 (72%) - Imported: 12399 establishments, 607 inspections
+Progress: 12500/17193 (73%) - Imported: 12499 establishments, 640 inspections
+Progress: 12600/17193 (73%) - Imported: 12599 establishments, 675 inspections
+Progress: 12700/17193 (74%) - Imported: 12699 establishments, 700 inspections
+Progress: 12800/17193 (74%) - Imported: 12799 establishments, 732 inspections
+Progress: 12900/17193 (75%) - Imported: 12899 establishments, 765 inspections
+Progress: 13000/17193 (76%) - Imported: 12999 establishments, 800 inspections
+Progress: 13100/17193 (76%) - Imported: 13099 establishments, 821 inspections
+Progress: 13200/17193 (77%) - Imported: 13199 establishments, 843 inspections
+Progress: 13300/17193 (77%) - Imported: 13299 establishments, 881 inspections
+Progress: 13400/17193 (78%) - Imported: 13399 establishments, 919 inspections
+Progress: 13500/17193 (79%) - Imported: 13499 establishments, 968 inspections
+Progress: 13600/17193 (79%) - Imported: 13599 establishments, 998 inspections
+Progress: 13700/17193 (80%) - Imported: 13699 establishments, 1021 inspections
+Progress: 13800/17193 (80%) - Imported: 13799 establishments, 1042 inspections
+Progress: 13900/17193 (81%) - Imported: 13899 establishments, 1068 inspections
+Progress: 14000/17193 (81%) - Imported: 13999 establishments, 1089 inspections
+Progress: 14100/17193 (82%) - Imported: 14099 establishments, 1116 inspections
+Progress: 14200/17193 (83%) - Imported: 14199 establishments, 1146 inspections
+Progress: 14300/17193 (83%) - Imported: 14299 establishments, 1187 inspections
+Progress: 14400/17193 (84%) - Imported: 14399 establishments, 1211 inspections
+Progress: 14500/17193 (84%) - Imported: 14499 establishments, 1259 inspections
+Progress: 14600/17193 (85%) - Imported: 14599 establishments, 1290 inspections
+Progress: 14700/17193 (85%) - Imported: 14699 establishments, 1319 inspections
+Progress: 14800/17193 (86%) - Imported: 14799 establishments, 1327 inspections
+Progress: 14900/17193 (87%) - Imported: 14899 establishments, 1354 inspections
+Progress: 15000/17193 (87%) - Imported: 14999 establishments, 1375 inspections
+Progress: 15100/17193 (88%) - Imported: 15099 establishments, 1387 inspections
+Progress: 15200/17193 (88%) - Imported: 15199 establishments, 1420 inspections
+Progress: 15300/17193 (89%) - Imported: 15299 establishments, 1455 inspections
+Progress: 15400/17193 (90%) - Imported: 15399 establishments, 1468 inspections
+Progress: 15500/17193 (90%) - Imported: 15499 establishments, 1497 inspections
+Progress: 15600/17193 (91%) - Imported: 15599 establishments, 1501 inspections
+Progress: 15700/17193 (91%) - Imported: 15699 establishments, 1523 inspections
+Progress: 15800/17193 (92%) - Imported: 15799 establishments, 1551 inspections
+Progress: 15900/17193 (92%) - Imported: 15899 establishments, 1564 inspections
+Progress: 16000/17193 (93%) - Imported: 15999 establishments, 1569 inspections
+Progress: 16100/17193 (94%) - Imported: 16099 establishments, 1582 inspections
+Progress: 16200/17193 (94%) - Imported: 16199 establishments, 1600 inspections
+Progress: 16300/17193 (95%) - Imported: 16299 establishments, 1617 inspections
+Progress: 16400/17193 (95%) - Imported: 16399 establishments, 1630 inspections
+Progress: 16500/17193 (96%) - Imported: 16499 establishments, 1652 inspections
+Progress: 16600/17193 (97%) - Imported: 16599 establishments, 1652 inspections
+Progress: 16700/17193 (97%) - Imported: 16699 establishments, 1666 inspections
+Progress: 16800/17193 (98%) - Imported: 16798 establishments, 1696 inspections
+Progress: 16900/17193 (98%) - Imported: 16898 establishments, 1712 inspections
+Progress: 17000/17193 (99%) - Imported: 16998 establishments, 1734 inspections
+Progress: 17100/17193 (99%) - Imported: 17098 establishments, 1781 inspections
+
+=== Import Complete ===
+Establishments: 17192
+Inspections: 1807
+Violations: 4458
+Geocoded addresses: 78
+Skipped (no coordinates): 0
+
+Assigning neighborhoods to establishments...
+Note: Run assign-neighborhoods.js separately to assign neighborhoods
+Updating neighborhood stats...

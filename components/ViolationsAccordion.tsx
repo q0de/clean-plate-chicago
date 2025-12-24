@@ -10,7 +10,6 @@ export interface Violation {
   violation_description: string;
   violation_comment?: string;
   is_critical: boolean;
-  plain_english?: string;
 }
 
 export interface Inspection {
@@ -185,9 +184,9 @@ export function ViolationsAccordion({ inspections }: ViolationsAccordionProps) {
                             )}
                           </div>
                           
-                          {/* Plain English explanation */}
+                          {/* Violation description */}
                           <p className="font-medium text-sm text-gray-800 mb-2">
-                            {violation.plain_english || violation.violation_description}
+                            {violation.violation_description}
                           </p>
                           
                           {/* Inspector comment */}
